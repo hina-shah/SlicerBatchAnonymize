@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>DSCI_Anonymize</class>
- <widget class="qMRMLWidget" name="DSCI_Anonymize">
+ <class>Sample</class>
+ <widget class="qMRMLWidget" name="Sample">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>279</width>
-    <height>286</height>
+    <width>527</width>
+    <height>257</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -20,24 +20,33 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Input directory with DICOMs:</string>
+         <string>Input Directory with DICOMs: </string>
         </property>
        </widget>
       </item>
       <item row="0" column="1">
        <widget class="ctkDirectoryButton" name="inDirButton">
         <property name="toolTip">
-         <string>Select directory with dicoms.</string>
+         <string>Select directory with DICOMs</string>
+        </property>
+        <property name="toolTipDuration">
+         <number>5</number>
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="inDetailsLabel">
+      <item row="1" column="0" colspan="2">
+       <widget class="QLabel" name="inDirButton_2">
         <property name="text">
-         <string>Input directory not selected</string>
+         <string>No directory selected</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
         </property>
        </widget>
       </item>
+     </layout>
+    </widget>
+   </item>
    <item>
     <widget class="ctkCollapsibleButton" name="outputsCollapsibleButton">
      <property name="text">
@@ -52,25 +61,37 @@
        </widget>
       </item>
       <item row="0" column="1">
-      <widget class="ctkDirectoryButton" name="outDirButton">
+       <widget class="ctkDirectoryButton" name="outDirButton">
         <property name="toolTip">
-         <string>Select an output directory.</string>
+         <string>Select a directory to copy the anonymized files to.</string>
+        </property>
+        <property name="toolTipDuration">
+         <number>5</number>
         </property>
        </widget>
       </item>
       <item row="1" column="0">
-      <widget class="QCheckBox" name="useUUIDCheckbox">
+       <widget class="QCheckBox" name="useUUIDCheckbox">
+        <property name="toolTip">
+         <string>Use UUID to rename the files. Prefixes will be ignored if this is enabled.</string>
+        </property>
+        <property name="toolTipDuration">
+         <number>5</number>
+        </property>
         <property name="text">
-         <string>Use UUID for file names</string>
+         <string>Use UUID</string>
         </property>
        </widget>
       </item>
       <item row="1" column="1">
-        <widget class="QLineEdit" name="prefixLineEdit">
-            <property name="toolTip">
-            <string>Files will be renamed with this prefix, if UUID is not requested </string>
-            </property>
-        </widget>
+       <widget class="QLineEdit" name="prefixLineEdit">
+        <property name="toolTip">
+         <string>Files will be renamed with this prefix, if UUID is not requested</string>
+        </property>
+        <property name="toolTipDuration">
+         <number>5</number>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
@@ -81,7 +102,10 @@
       <bool>false</bool>
      </property>
      <property name="toolTip">
-      <string>Run deanonymization.</string>
+      <string>Run deanonymization</string>
+     </property>
+     <property name="toolTipDuration">
+      <number>5</number>
      </property>
      <property name="text">
       <string>Start</string>
@@ -103,5 +127,25 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkDirectoryButton</class>
+   <extends>QWidget</extends>
+   <header>ctkDirectoryButton.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
+ <connections/>
 </ui>
