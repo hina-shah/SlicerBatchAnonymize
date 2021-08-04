@@ -5,6 +5,10 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+from pathlib import Path
+import csv
+import uuid
+
 #
 # DSCI_Anonymize
 #
@@ -50,6 +54,8 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    self.input_image_list = []
+    self.output_dir = None
 
   def setup(self):
     """
@@ -80,12 +86,37 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    
+    self.ui.useUUIDCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
+    self.ui.inDirButton.connect('directoryChanged(QString)', self.onInputDirChanged)
+    self.ui.outDirButton.connect('directoryChanged(QString)', self.onOutputDirChanged)
+
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def onInputDirChanged(self, dir_name):
+    input_path = Path(str(dir_name))
+    if not input_path.exists():
+      logging.error('The directory {} does not exist'.format(input_path))
+      return
+    # Get the list of images:
+    input_image_list = []
+    for pattern in [".dcm", ".dicom", ".DICOM", ".DCM"]:
+      input_image_list.extend( list(input_path.glob("**/*" + pattern)))
+    if len(input_image_list) > 0:
+      self.input_image_list = input_image_list
+    self.updateParameterNodeFromGUI()
+
+  def onOutputDirChanged(self, dir_name):
+    output_dir = Path(str(dir_name))
+    if not output_dir.exists():
+      logging.error('The directory {} does not exist'.format(output_dir))
+      return
+    self.output_dir = output_dir
+    self.updateParameterNodeFromGUI()
+
 
   def cleanup(self):
     """
@@ -162,12 +193,17 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    self.ui.inDetailsLable.setText(self._parameterNode.GetParameter("InListDetailstring"))
+    print(self._parameterNode.GetParameter("InListDetailsString"))
+    self.ui.inDetailsLabel.setText(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.useUUIDCheckBox.checked = (self._parameterNode.GetParameter("UseUUID") == "true")
-    self.ui.prefixLineEdit.setText(self._paramterNode.GetParameter("OutputPrefix"))
-
-    self.ui.prefixLineEdit = not self.ui.useUUIDCheckBox.checked
+    self.ui.prefixLineEdit.setText(self._parameterNode.GetParameter("OutputPrefix"))
+    self.ui.prefixLineEdit.setEnabled(not self.ui.useUUIDCheckBox.checked)
     
+    prefix_condition = (not self.ui.useUUIDCheckBox.checked and len(self.ui.prefixLineEdit.text) > 0) or self.ui.useUUIDCheckBox.checked
+    self.ui.applyButton.setEnabled(len(self.input_image_list) > 0 and \
+                                  self.output_dir is not None and \
+                                  self.output_dir.exists() and \
+                                  prefix_condition)
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -182,11 +218,13 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-    self._parameterNode.SetParameter("InListDetailsString", "List length is: ")
-    self._parameterNode.SetParamater("UseUUID", "true" if self.ui.useUUIDCheckBox.checked else "false")
-    self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text())
-    
+    self._parameterNode.SetParameter("InListDetailsString", "Will anonymize: " + str(len(self.input_image_list)) + " images")
+    self._parameterNode.SetParameter("UseUUID", "true" if self.ui.useUUIDCheckBox.checked else "false")
+    self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text)
+    self._parameterNode.SetParameter("InputDirectory", self.ui.inDirButton.text)
+    self._parameterNode.SetParameter("OutputDirectory", self.ui.outDirButton.text)
     self._parameterNode.EndModify(wasModified)
+    self.updateGUIFromParameterNode()
 
   def onApplyButton(self):
     """
@@ -194,7 +232,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     try:
       # Compute output
-      self.logic.process(self.inputDir, self.outputDir)
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.useUUIDCheckBox.checked, self.ui.prefixLineEdit.text)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -224,12 +262,18 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("Threshold"):
-      parameterNode.SetParameter("Threshold", "100.0")
-    if not parameterNode.GetParameter("Invert"):
-      parameterNode.SetParameter("Invert", "false")
+    if not parameterNode.GetParameter("UseUUID"):
+      parameterNode.SetParameter("UseUUID", "false")
+    if not parameterNode.GetParameter("OutputPrefix"):
+      parameterNode.SetParameter("OutputPrefix", "File")
+    if not parameterNode.GetParameter("InListDetailsString"):
+      parameterNode.SetParameter("InListDetailsString", "No directory selected")
+    if not parameterNode.GetParameter("InputDirectory"):
+      parameterNode.SetParameter("InputDirectory", "")
+    if not parameterNode.GetParameter("OutputDirectory"):
+      parameterNode.SetParameter("OutputDirectory", "")
 
-  def process(self, inputDir, outputDir):
+  def process(self, input_image_list, output_dir, useUUID, prefix):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -240,17 +284,57 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     :param showResult: show output volume in slice viewers
     """
 
-    if not inputDir or not outputDir:
-      raise ValueError("Input or output directory is invalid")
+    if len(input_image_list) == 0 or not output_dir.exists() or len(prefix) == 0:
+      raise ValueError("Input or output specified is invalid")
 
     import time
     startTime = time.time()
     logging.info('Processing started')
 
-    # read the input directory for dicoms, 
-    #  
-    # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    
+    crosswalk = []
+    error_files = []
+    # read the input directory for dicoms,
+    progress = qt.QProgressDialog("Loading Master CSV", "Abort Load", 0, len(input_image_list))
+    # progress.setWindowModality(qt.Qt.WindowModal)
+    for idx, imgpath in enumerate(input_image_list):
+      progress.setValue(idx)
+      if progress.wasCanceled:
+        break
+      try:
+        image_node = slicer.util.loadVolume(str(imgpath), {'singleFile':True})
+        if useUUID:
+          filename = str(uuid.uuid4()) + ".nrrd"
+        else:
+          filename = (prefix+ "_%04d"%idx + ".nrrd")
+        out_path = output_dir / filename
+        slicer.util.saveNode(image_node, str(out_path))
+      except Exception as e:
+        logging.error("Error reading/writing file: {}".format(imgpath))
+        if image_node is not None:
+          slicer.mrmlScene.RemoveNode(image_node)
+        error_files.append(imgpath)
+      else:
+        slicer.mrmlScene.RemoveNode(image_node)
+        crosswalk.append( {"input": imgpath, "output" : out_path})
+    progress.setValue(len(input_image_list))
+
+    if len(crosswalk) > 0:
+      try:
+        with open(output_dir/"crosswalk.csv", "w") as f:
+          w = csv.DictWriter(f, crosswalk[0].keys())
+          w.writeheader()
+          w.writerows(crosswalk)
+      except Exception as e:
+        logging.error("Failed to write the crosswalk file")
+        slicer.util.errorDisplay("Failed to write the crosswalk file", parent=self.parent)
+    if len(error_files) > 0:
+      try:
+        with open(output_dir / "files_not_converted.txt", "w") as f:
+          for e in error_files:
+            f.write(e+"\n")
+      except IOError:
+        logging.error("Failed to write the list of failed files")
+        slicer.util.errorDisplay("Failed to write the list of failed files", parent=self.parent)
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
 

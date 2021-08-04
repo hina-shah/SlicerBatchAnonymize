@@ -35,7 +35,7 @@
        </widget>
       </item>
       <item row="1" column="0" colspan="2">
-       <widget class="QLabel" name="inDirButton_2">
+       <widget class="QLabel" name="inDetailsLabel">
         <property name="text">
          <string>No directory selected</string>
         </property>
@@ -71,7 +71,7 @@
        </widget>
       </item>
       <item row="1" column="0">
-       <widget class="QCheckBox" name="useUUIDCheckbox">
+       <widget class="QCheckBox" name="useUUIDCheckBox">
         <property name="toolTip">
          <string>Use UUID to rename the files. Prefixes will be ignored if this is enabled.</string>
         </property>
