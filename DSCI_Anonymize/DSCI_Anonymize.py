@@ -4,6 +4,8 @@ import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
+import DICOMLib.DICOMUtils as dutils
+import DICOMScalarVolumePlugin
 
 from pathlib import Path
 import csv
@@ -25,7 +27,7 @@ class DSCI_Anonymize(ScriptedLoadableModule):
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Hina Shah (UNC Chapel Hill.)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
-    self.parent.helpText = "Helper tool for anonymizing multiple DICOM files."
+    self.parent.helpText = "Helper tool for anonymizing multiple DICOM series/files."
 
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = ""
@@ -105,8 +107,13 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     input_image_list = []
     for pattern in [".dcm", ".dicom", ".DICOM", ".DCM"]:
       input_image_list.extend( list(input_path.glob("**/*" + pattern)))
+    dir_set = set()
     if len(input_image_list) > 0:
-      self.input_image_list = input_image_list
+      for im in input_image_list:
+        dir_set.add(im.parent)
+    if len(dir_set) > 0:
+      # This would be the list of directories (i.e. one full scan image in one directory)
+      self.input_image_list = list(dir_set)
     self.updateParameterNodeFromGUI()
 
   def onOutputDirChanged(self, dir_name):
@@ -116,7 +123,6 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     self.output_dir = output_dir
     self.updateParameterNodeFromGUI()
-
 
   def cleanup(self):
     """
@@ -294,28 +300,57 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     crosswalk = []
     error_files = []
     # read the input directory for dicoms,
-    progress = qt.QProgressDialog("Loading Master CSV", "Abort Load", 0, len(input_image_list))
-    # progress.setWindowModality(qt.Qt.WindowModal)
+    slicerdb = slicer.dicomDatabase
+    if not slicerdb.isOpen:
+        raise OSError('Slicer DICOM module or database cannot be accessed')
+
+    progress = qt.QProgressDialog("Importing DICOM Data to database", "Abort Load", 0, len(input_image_list))
+    progress.reset()
+    progress.setWindowModality(qt.Qt.WindowModal)
     for idx, imgpath in enumerate(input_image_list):
       progress.setValue(idx)
       if progress.wasCanceled:
         break
-      try:
-        image_node = slicer.util.loadVolume(str(imgpath), {'singleFile':True})
-        if useUUID:
-          filename = str(uuid.uuid4()) + ".nrrd"
-        else:
-          filename = (prefix+ "_%04d"%idx + ".nrrd")
-        out_path = output_dir / filename
-        slicer.util.saveNode(image_node, str(out_path))
-      except Exception as e:
-        logging.error("Error reading/writing file: {}".format(imgpath))
-        if image_node is not None:
-          slicer.mrmlScene.RemoveNode(image_node)
-        error_files.append(imgpath)
-      else:
-        slicer.mrmlScene.RemoveNode(image_node)
-        crosswalk.append( {"input": imgpath, "output" : out_path})
+      dutils.importDicom(imgpath, slicerdb)
+    print("Done importing to Slicer DICOM Database")
+    progress.setValue(len(input_image_list))
+
+    # # progress.setWindowModality(qt.Qt.WindowModal)
+    progress.setLabelText("Anonymizing and epxporting")
+    progress.setCancelButtonText("Abort export")
+    progress.reset()
+    idx = 0
+    scalarVolumeReader = DICOMScalarVolumePlugin.DICOMScalarVolumePluginClass()
+    for patient in slicerdb.patients():
+      for study in slicerdb.studiesForPatient(patient):
+        for series in slicerdb.seriesForStudy(study):
+          if progress.wasCanceled:
+            break
+          print('looking at series ' + series + ' for patient ' + patient)
+          files = slicerdb.filesForSeries(series)
+          imgpath =  Path(files[0]).parent
+          print("Path for this series : {}".format(imgpath))
+          if imgpath in input_image_list:
+            print("Will export this")
+            progress.setValue(idx)
+            try:
+              loadable = scalarVolumeReader.examineForImport([files])[0]
+              image_node = scalarVolumeReader.load(loadable)
+              if useUUID:
+                filename = str(uuid.uuid4()) + ".nrrd"
+              else:
+                filename = (prefix+ "_%04d"%idx + ".nrrd")
+              out_path = output_dir / filename
+              slicer.util.saveNode(image_node, str(out_path))
+            except Exception as e:
+              logging.error("Error reading/writing file: {}".format(imgpath))
+              if image_node is not None:
+                slicer.mrmlScene.RemoveNode(image_node)
+              error_files.append(imgpath)
+            else:
+              slicer.mrmlScene.RemoveNode(image_node)
+              crosswalk.append( {"input": imgpath, "output" : out_path})
+            idx+=1
     progress.setValue(len(input_image_list))
 
     if len(crosswalk) > 0:
@@ -337,6 +372,30 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
         slicer.util.errorDisplay("Failed to write the list of failed files", parent=self.parent)
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
+
+    # for idx, imgpath in enumerate(input_image_list):
+    #   progress.setValue(idx)
+    #   if progress.wasCanceled:
+    #     break
+    #   try:
+    #     image_node = slicer.util.loadVolume(str(imgpath), {'singleFile':True})
+    #     if useUUID:
+    #       filename = str(uuid.uuid4()) + ".nrrd"
+    #     else:
+    #       filename = (prefix+ "_%04d"%idx + ".nrrd")
+    #     out_path = output_dir / filename
+    #     slicer.util.saveNode(image_node, str(out_path))
+    #   except Exception as e:
+    #     logging.error("Error reading/writing file: {}".format(imgpath))
+    #     if image_node is not None:
+    #       slicer.mrmlScene.RemoveNode(image_node)
+    #     error_files.append(imgpath)
+    #   else:
+    #     slicer.mrmlScene.RemoveNode(image_node)
+    #     crosswalk.append( {"input": imgpath, "output" : out_path})
+    # progress.setValue(len(input_image_list))
+
+
 
 #
 # DSCI_AnonymizeTest
