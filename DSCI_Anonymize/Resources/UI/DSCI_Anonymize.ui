@@ -45,7 +45,7 @@
        </widget>
       </item>
       <item row="1" column="1">
-       <widget class="QComboBox" name="inputFormat_ComboBox">
+       <widget class="QComboBox" name="inputFormatComboBox">
         <item>
          <property name="text">
           <string>*.dcm,*.dicom, *.DICOM,*.DCM</string>
@@ -92,7 +92,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QComboBox" name="outputFormat_ComboBox">
+         <widget class="QComboBox" name="outputFormatComboBox">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
             <horstretch>0</horstretch>

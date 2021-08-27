@@ -56,6 +56,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    print("In init")
     self.input_image_list = []
     self.output_dir = None
 
@@ -63,6 +64,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Called when the user opens the module the first time and the widget is initialized.
     """
+    print("In setup ", len(self.input_image_list))
     ScriptedLoadableModuleWidget.setup(self)
 
     # Load widget from .ui file (created by Qt Designer).
@@ -105,7 +107,10 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     # Get the list of images:
     input_image_list = []
-    for pattern in [".dcm", ".dicom", ".DICOM", ".DCM"]:
+    input_pattern = self.ui.inputFormatComboBox.currentText
+    print("Will look for: ", input_pattern)
+    print("Splitted patterns: ", input_pattern.split(','))
+    for pattern in input_pattern:
       input_image_list.extend( list(input_path.glob("**/*" + pattern)))
     dir_set = set()
     if len(input_image_list) > 0:
@@ -135,6 +140,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called each time the user opens this module.
     """
     # Make sure parameter node exists and observed
+    print('In enter')
     self.initializeParameterNode()
 
   def exit(self):
@@ -157,6 +163,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
+      print("Scene is closed")
       self.initializeParameterNode()
 
   def initializeParameterNode(self):
@@ -165,6 +172,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Parameter node stores all user choices in parameter values, node selections, etc.
     # so that when the scene is saved and reloaded, these settings are restored.
+    print("Setting parameter node.")
     self.setParameterNode(self.logic.getParameterNode())
 
   def setParameterNode(self, inputParameterNode):
@@ -172,10 +180,11 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Set and observe parameter node.
     Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
     """
-
     if inputParameterNode:
+      print("Setting default parameters?")
       self.logic.setDefaultParameters(inputParameterNode)
-
+    else:
+      print("Not setting default parameters")
     # Unobserve previously selected parameter node and add an observer to the newly selected.
     # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
     # those are reflected immediately in the GUI.
@@ -204,7 +213,14 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.useUUIDCheckBox.checked = (self._parameterNode.GetParameter("UseUUID") == "true")
     self.ui.prefixLineEdit.setText(self._parameterNode.GetParameter("OutputPrefix"))
     self.ui.prefixLineEdit.setEnabled(not self.ui.useUUIDCheckBox.checked)
-    
+    formatText = self._parameterNode.GetParameter("OutputFormat")
+    outIndex = max(0, self.ui.outputFormatComboBox.findText(formatText))
+    self.ui.outputFormatComboBox.setCurrentIndex(outIndex)
+
+    formatText = self._parameterNode.GetParameter("InputFormat")
+    outIndex = max(0, self.ui.outputFormatComboBox.findText(formatText))
+    self.ui.inputFormatComboBox.setCurrentIndex(outIndex)
+
     prefix_condition = (not self.ui.useUUIDCheckBox.checked and len(self.ui.prefixLineEdit.text) > 0) or self.ui.useUUIDCheckBox.checked
     self.ui.applyButton.setEnabled(len(self.input_image_list) > 0 and \
                                   self.output_dir is not None and \
@@ -229,8 +245,10 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text)
     self._parameterNode.SetParameter("InputDirectory", self.ui.inDirButton.text)
     self._parameterNode.SetParameter("OutputDirectory", self.ui.outDirButton.text)
+    self._parameterNode.SetParameter("InputFormat", self.ui.inputFormatComboBox.currentText)
+    self._parameterNode.SetParameter("OutputFormat", self.ui.outputFormatComboBox.currentText)
     self._parameterNode.EndModify(wasModified)
-    self.updateGUIFromParameterNode()
+    #self.updateGUIFromParameterNode()
 
   def onApplyButton(self):
     """
@@ -238,7 +256,8 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     try:
       # Compute output
-      self.logic.process(self.input_image_list, self.output_dir, self.ui.useUUIDCheckBox.checked, self.ui.prefixLineEdit.text)
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.useUUIDCheckBox.checked, \
+                           self.ui.prefixLineEdit.text, self.ui.outputFormatComboBox.currentText)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -268,18 +287,16 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("UseUUID"):
-      parameterNode.SetParameter("UseUUID", "false")
-    if not parameterNode.GetParameter("OutputPrefix"):
-      parameterNode.SetParameter("OutputPrefix", "File")
-    if not parameterNode.GetParameter("InListDetailsString"):
-      parameterNode.SetParameter("InListDetailsString", "No directory selected")
-    if not parameterNode.GetParameter("InputDirectory"):
-      parameterNode.SetParameter("InputDirectory", "")
-    if not parameterNode.GetParameter("OutputDirectory"):
-      parameterNode.SetParameter("OutputDirectory", "")
+    parameterNode.SetParameter("UseUUID", "false")
+    parameterNode.SetParameter("OutputPrefix", "File")
+    parameterNode.SetParameter("InListDetailsString", "No directory selected")
+    parameterNode.SetParameter("InputDirectory", "")
+    parameterNode.SetParameter("OutputDirectory", "")
+    parameterNode.SetParameter("InputFormat", "*.dcm,*.dicom,*.DICOM,*.DCM")
+    parameterNode.SetParameter("OutputFormat", ".nii.gz")
 
-  def process(self, input_image_list, output_dir, useUUID, prefix):
+
+  def process(self, input_image_list, output_dir, useUUID, prefix, out_format):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -311,7 +328,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
       progress.setValue(idx)
       if progress.wasCanceled:
         break
-      dutils.importDicom(imgpath, slicerdb)
+    dutils.importDicom(imgpath, slicerdb)
     print("Done importing to Slicer DICOM Database")
     progress.setValue(len(input_image_list))
 
@@ -351,6 +368,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
               slicer.mrmlScene.RemoveNode(image_node)
               crosswalk.append( {"input": imgpath, "output" : out_path})
             idx+=1
+
     progress.setValue(len(input_image_list))
 
     if len(crosswalk) > 0:
