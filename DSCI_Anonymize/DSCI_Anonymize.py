@@ -107,11 +107,9 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     # Get the list of images:
     input_image_list = []
-    input_pattern = self.ui.inputFormatComboBox.currentText
-    print("Will look for: ", input_pattern)
-    print("Splitted patterns: ", input_pattern.split(','))
+    input_pattern = self.ui.inputFormatComboBox.currentText.split(',')
     for pattern in input_pattern:
-      input_image_list.extend( list(input_path.glob("**/*" + pattern)))
+      input_image_list.extend( list(input_path.glob("**/" + pattern)))
     dir_set = set()
     if len(input_image_list) > 0:
       for im in input_image_list:
@@ -140,7 +138,6 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called each time the user opens this module.
     """
     # Make sure parameter node exists and observed
-    print('In enter')
     self.initializeParameterNode()
 
   def exit(self):
@@ -163,7 +160,6 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
-      print("Scene is closed")
       self.initializeParameterNode()
 
   def initializeParameterNode(self):
@@ -172,7 +168,6 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Parameter node stores all user choices in parameter values, node selections, etc.
     # so that when the scene is saved and reloaded, these settings are restored.
-    print("Setting parameter node.")
     self.setParameterNode(self.logic.getParameterNode())
 
   def setParameterNode(self, inputParameterNode):
@@ -181,10 +176,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
     """
     if inputParameterNode:
-      print("Setting default parameters?")
       self.logic.setDefaultParameters(inputParameterNode)
-    else:
-      print("Not setting default parameters")
     # Unobserve previously selected parameter node and add an observer to the newly selected.
     # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
     # those are reflected immediately in the GUI.
@@ -354,9 +346,9 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
               loadable = scalarVolumeReader.examineForImport([files])[0]
               image_node = scalarVolumeReader.load(loadable)
               if useUUID:
-                filename = str(uuid.uuid4()) + ".nrrd"
+                filename = str(uuid.uuid4()) + out_format
               else:
-                filename = (prefix+ "_%04d"%idx + ".nrrd")
+                filename = (prefix+ "_%04d"%idx + out_format)
               out_path = output_dir / filename
               slicer.util.saveNode(image_node, str(out_path))
             except Exception as e:
