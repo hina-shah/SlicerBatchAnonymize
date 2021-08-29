@@ -350,7 +350,10 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
               else:
                 filename = (prefix+ "_%04d"%idx + out_format)
               out_path = output_dir / filename
-              slicer.util.saveNode(image_node, str(out_path))
+              if out_format == ".dcm":
+                slicer.util.errorDisplay("Export to dicom format still not supported")
+              else:
+                slicer.util.saveNode(image_node, str(out_path))
             except Exception as e:
               logging.error("Error reading/writing file: {}".format(imgpath))
               if image_node is not None:
