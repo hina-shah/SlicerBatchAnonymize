@@ -57,7 +57,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
     print("In init")
-    self.input_image_list = []
+    self.input_image_list = {}
     self.output_dir = None
 
   def setup(self):
@@ -116,7 +116,8 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         dir_set.add(im.parent)
     if len(dir_set) > 0:
       # This would be the list of directories (i.e. one full scan image in one directory)
-      self.input_image_list = list(dir_set)
+      for idx, d in enumerate(dir_set):
+        self.input_image_list[d] = [idx,""]
     self.updateParameterNodeFromGUI()
 
   def onOutputDirChanged(self, dir_name):
@@ -240,7 +241,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetParameter("InputFormat", self.ui.inputFormatComboBox.currentText)
     self._parameterNode.SetParameter("OutputFormat", self.ui.outputFormatComboBox.currentText)
     self._parameterNode.EndModify(wasModified)
-    #self.updateGUIFromParameterNode()
+    self.updateGUIFromParameterNode()
 
   def onApplyButton(self):
     """
@@ -315,17 +316,18 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
 
     progress = qt.QProgressDialog("Importing DICOM Data to database", "Abort Load", 0, len(input_image_list))
     progress.reset()
-    progress.setWindowModality(qt.Qt.WindowModal)
-    for idx, imgpath in enumerate(input_image_list):
+    #progress.setWindowModality(qt.Qt.WindowModal)
+    for idx, imgpath in enumerate(list(input_image_list.keys())):
       progress.setValue(idx)
       if progress.wasCanceled:
         break
-    dutils.importDicom(imgpath, slicerdb)
+      dutils.importDicom( imgpath, slicerdb)
     print("Done importing to Slicer DICOM Database")
     progress.setValue(len(input_image_list))
+    progress.reset()
 
     # # progress.setWindowModality(qt.Qt.WindowModal)
-    progress.setLabelText("Anonymizing and epxporting")
+    progress.setLabelText("Anonymizing and exporting")
     progress.setCancelButtonText("Abort export")
     progress.reset()
     idx = 0
@@ -348,7 +350,8 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
               if useUUID:
                 filename = str(uuid.uuid4()) + out_format
               else:
-                filename = (prefix+ "_%04d"%idx + out_format)
+                out_idx = input_image_list[imgpath][0]
+                filename = (prefix+ "_%04d"%out_idx + out_format)
               out_path = output_dir / filename
               if out_format == ".dcm":
                 slicer.util.errorDisplay("Export to dicom format still not supported")
