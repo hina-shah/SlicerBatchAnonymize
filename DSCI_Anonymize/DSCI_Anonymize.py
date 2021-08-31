@@ -56,8 +56,9 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
-    self.input_image_list = []
+    self.input_image_list = {}
     self.output_dir = None
+    self.setParameterNode(None)
 
   def setup(self):
     """
@@ -91,12 +92,25 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.useUUIDCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
     self.ui.inDirButton.connect('directoryChanged(QString)', self.onInputDirChanged)
     self.ui.outDirButton.connect('directoryChanged(QString)', self.onOutputDirChanged)
-
+    self.ui.outputFormatComboBox.connect("currentIndexChanged(int)", self.updateParameterNodeFromGUI)
+    self.ui.prefixLineEdit.connect("textChanged(QString)",  self.updateParameterNodeFromGUI)
+    self.ui.crosswalkTableWidget.currentItemChanged.connect(self.onCrossWalkRowChanged)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def onCrossWalkRowChanged(self, current, previous):
+    if previous==None:
+      return
+    prev_row = previous.row()
+    for d in self.input_image_list:
+      if self.input_image_list[d][0] == prev_row:
+        if previous.text() != self.input_image_list[d][1]:
+          self.input_image_list[d][1] = previous.text()
+          self.input_image_list[d][2] = True
+          self.updateParameterNodeFromGUI()
 
   def onInputDirChanged(self, dir_name):
     input_path = Path(str(dir_name))
@@ -105,15 +119,19 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     # Get the list of images:
     input_image_list = []
-    for pattern in [".dcm", ".dicom", ".DICOM", ".DCM"]:
-      input_image_list.extend( list(input_path.glob("**/*" + pattern)))
+    input_pattern = self.ui.inputFormatComboBox.currentText.split(',')
+    for pattern in input_pattern:
+      input_image_list.extend( list(input_path.glob("**/" + pattern)))
     dir_set = set()
     if len(input_image_list) > 0:
       for im in input_image_list:
         dir_set.add(im.parent)
     if len(dir_set) > 0:
+      self.input_image_list = {}
       # This would be the list of directories (i.e. one full scan image in one directory)
-      self.input_image_list = list(dir_set)
+      for idx, d in enumerate(dir_set):
+        # third element keeps track of manual edits. False: auto, True is manual
+        self.input_image_list[d] = [idx,"", False]
     self.updateParameterNodeFromGUI()
 
   def onOutputDirChanged(self, dir_name):
@@ -149,6 +167,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called just before the scene is closed.
     """
     # Parameter node will be reset, do not use it anymore
+    self.input_image_list={}
     self.setParameterNode(None)
 
   def onSceneEndClose(self, caller, event):
@@ -172,10 +191,8 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Set and observe parameter node.
     Observation is needed because when the parameter node is changed then the GUI must be updated immediately.
     """
-
     if inputParameterNode:
       self.logic.setDefaultParameters(inputParameterNode)
-
     # Unobserve previously selected parameter node and add an observer to the newly selected.
     # Changes of parameter node are observed so that whenever parameters are changed by a script or any other module
     # those are reflected immediately in the GUI.
@@ -204,12 +221,45 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.useUUIDCheckBox.checked = (self._parameterNode.GetParameter("UseUUID") == "true")
     self.ui.prefixLineEdit.setText(self._parameterNode.GetParameter("OutputPrefix"))
     self.ui.prefixLineEdit.setEnabled(not self.ui.useUUIDCheckBox.checked)
-    
+    formatText = self._parameterNode.GetParameter("OutputFormat")
+    outIndex = max(0, self.ui.outputFormatComboBox.findText(formatText))
+    self.ui.outputFormatComboBox.setCurrentIndex(outIndex)
+
+    formatText = self._parameterNode.GetParameter("InputFormat")
+    outIndex = max(0, self.ui.outputFormatComboBox.findText(formatText))
+    self.ui.inputFormatComboBox.setCurrentIndex(outIndex)
+
     prefix_condition = (not self.ui.useUUIDCheckBox.checked and len(self.ui.prefixLineEdit.text) > 0) or self.ui.useUUIDCheckBox.checked
     self.ui.applyButton.setEnabled(len(self.input_image_list) > 0 and \
                                   self.output_dir is not None and \
                                   self.output_dir.exists() and \
                                   prefix_condition)
+    #Update the crosswalk dict and text here
+    self.ui.crosswalkTableWidget.setRowCount(len(self.input_image_list))
+    self.ui.crosswalkTableWidget.setHorizontalHeaderLabels(["Output file name", "Target for input"])
+    self.ui.crosswalkTableWidget.horizontalHeader().setVisible(True)
+    if len(self.input_image_list) > 0:
+      for k in self.input_image_list:
+        entry =  self.input_image_list[k]
+        index = entry[0]
+        if entry[2]:
+          # Filename was edited manually.
+          filename = entry[1]
+        elif (self._parameterNode.GetParameter("UseUUID") == "true"):
+          filename = str(uuid.uuid4())
+        else:
+          filename = (self._parameterNode.GetParameter("OutputPrefix")+ "_%04d"%index)
+        self.input_image_list[k][1]=filename
+        newItem = qt.QTableWidgetItem(filename)
+        newItem.setToolTip(filename)
+        self.ui.crosswalkTableWidget.setItem(index, 0, newItem)
+
+        newItem1 = qt.QTableWidgetItem(k)
+        newItem1.setToolTip(str(k))
+        newItem1.setFlags(newItem1.flags() & ~qt.Qt.ItemIsEditable)
+        self.ui.crosswalkTableWidget.setItem(index, 1, newItem1)
+    self.ui.crosswalkTableWidget.resizeColumnToContents(1)
+
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -218,17 +268,17 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This method is called when the user makes any change in the GUI.
     The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
     """
-
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
     self._parameterNode.SetParameter("InListDetailsString", "Will anonymize: " + str(len(self.input_image_list)) + " images")
     self._parameterNode.SetParameter("UseUUID", "true" if self.ui.useUUIDCheckBox.checked else "false")
     self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text)
     self._parameterNode.SetParameter("InputDirectory", self.ui.inDirButton.text)
     self._parameterNode.SetParameter("OutputDirectory", self.ui.outDirButton.text)
+    self._parameterNode.SetParameter("InputFormat", self.ui.inputFormatComboBox.currentText)
+    self._parameterNode.SetParameter("OutputFormat", self.ui.outputFormatComboBox.currentText)
     self._parameterNode.EndModify(wasModified)
     self.updateGUIFromParameterNode()
 
@@ -238,7 +288,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     try:
       # Compute output
-      self.logic.process(self.input_image_list, self.output_dir, self.ui.useUUIDCheckBox.checked, self.ui.prefixLineEdit.text)
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -268,18 +318,27 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("UseUUID"):
-      parameterNode.SetParameter("UseUUID", "false")
-    if not parameterNode.GetParameter("OutputPrefix"):
-      parameterNode.SetParameter("OutputPrefix", "File")
-    if not parameterNode.GetParameter("InListDetailsString"):
-      parameterNode.SetParameter("InListDetailsString", "No directory selected")
-    if not parameterNode.GetParameter("InputDirectory"):
-      parameterNode.SetParameter("InputDirectory", "")
-    if not parameterNode.GetParameter("OutputDirectory"):
-      parameterNode.SetParameter("OutputDirectory", "")
+    parameterNode.SetParameter("UseUUID", "false")
+    parameterNode.SetParameter("OutputPrefix", "File")
+    parameterNode.SetParameter("InListDetailsString", "No directory selected")
+    parameterNode.SetParameter("InputDirectory", "")
+    parameterNode.SetParameter("OutputDirectory", "")
+    parameterNode.SetParameter("InputFormat", "*.dcm,*.dicom,*.DICOM,*.DCM")
+    parameterNode.SetParameter("OutputFormat", ".nii.gz")
 
-  def process(self, input_image_list, output_dir, useUUID, prefix):
+  def reportProgress(self, msg, percentage):
+    # Abort download if cancel is clicked in progress bar
+    if slicer.progressWindow.wasCanceled:
+      raise Exception("process aborted")
+    # Update progress window
+    slicer.progressWindow.show()
+    slicer.progressWindow.activateWindow()
+    slicer.progressWindow.setValue(int(percentage))
+    slicer.progressWindow.setLabelText(msg)
+    # Process events to allow screen to refresh
+    slicer.app.processEvents()
+
+  def process(self, input_image_list, output_dir, out_format):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -290,8 +349,12 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     :param showResult: show output volume in slice viewers
     """
 
-    if len(input_image_list) == 0 or not output_dir.exists() or len(prefix) == 0:
+    if len(input_image_list) == 0 or not output_dir.exists():
       raise ValueError("Input or output specified is invalid")
+
+    if out_format == ".dcm":
+      slicer.util.errorDisplay("Export to dicom format still not supported")
+      return
 
     import time
     startTime = time.time()
@@ -306,52 +369,51 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
 
     progress = qt.QProgressDialog("Importing DICOM Data to database", "Abort Load", 0, len(input_image_list))
     progress.reset()
-    progress.setWindowModality(qt.Qt.WindowModal)
-    for idx, imgpath in enumerate(input_image_list):
+    #progress.setWindowModality(qt.Qt.WindowModal)
+    for idx, imgpath in enumerate(list(input_image_list.keys())):
       progress.setValue(idx)
       if progress.wasCanceled:
         break
-      dutils.importDicom(imgpath, slicerdb)
-    print("Done importing to Slicer DICOM Database")
+      dutils.importDicom( imgpath, slicerdb)
     progress.setValue(len(input_image_list))
+    progress.reset()
+    print("Done importing to Slicer DICOM Database")
+    del progress
 
     # # progress.setWindowModality(qt.Qt.WindowModal)
-    progress.setLabelText("Anonymizing and epxporting")
-    progress.setCancelButtonText("Abort export")
-    progress.reset()
-    idx = 0
     scalarVolumeReader = DICOMScalarVolumePlugin.DICOMScalarVolumePluginClass()
-    for patient in slicerdb.patients():
-      for study in slicerdb.studiesForPatient(patient):
-        for series in slicerdb.seriesForStudy(study):
-          if progress.wasCanceled:
-            break
-          print('looking at series ' + series + ' for patient ' + patient)
-          files = slicerdb.filesForSeries(series)
-          imgpath =  Path(files[0]).parent
-          print("Path for this series : {}".format(imgpath))
-          if imgpath in input_image_list:
-            print("Will export this")
-            progress.setValue(idx)
-            try:
-              loadable = scalarVolumeReader.examineForImport([files])[0]
-              image_node = scalarVolumeReader.load(loadable)
-              if useUUID:
-                filename = str(uuid.uuid4()) + ".nrrd"
+    slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting',autoClose=True)
+    idx = 0
+    try:
+      for patient in slicerdb.patients():
+        for study in slicerdb.studiesForPatient(patient):
+          for series in slicerdb.seriesForStudy(study):
+            self.reportProgress("Anonymizing and Exporting", idx*100.0/len(input_image_list))
+            print('looking at series ' + series + ' for patient ' + patient)
+            files = slicerdb.filesForSeries(series)
+            imgpath =  Path(files[0]).parent
+            print("Path for this series : {}".format(imgpath))
+            if imgpath in input_image_list:
+              print("Will export this")
+              try:
+                loadable = scalarVolumeReader.examineForImport([files])[0]
+                image_node = scalarVolumeReader.load(loadable)
+                filename = input_image_list[imgpath][1] + out_format
+                out_path = output_dir / filename
+                slicer.util.saveNode(image_node, str(out_path))
+              except Exception as e:
+                logging.error("Error reading/writing file: {}".format(imgpath))
+                if image_node is not None:
+                  slicer.mrmlScene.RemoveNode(image_node)
+                error_files.append(imgpath)
               else:
-                filename = (prefix+ "_%04d"%idx + ".nrrd")
-              out_path = output_dir / filename
-              slicer.util.saveNode(image_node, str(out_path))
-            except Exception as e:
-              logging.error("Error reading/writing file: {}".format(imgpath))
-              if image_node is not None:
                 slicer.mrmlScene.RemoveNode(image_node)
-              error_files.append(imgpath)
-            else:
-              slicer.mrmlScene.RemoveNode(image_node)
-              crosswalk.append( {"input": imgpath, "output" : out_path})
-            idx+=1
-    progress.setValue(len(input_image_list))
+                crosswalk.append( {"input": imgpath, "output" : out_path})
+              idx+=1
+    except Exception as e:
+      logging.error("Export aborted")
+    finally:
+      slicer.progressWindow.close()
 
     if len(crosswalk) > 0:
       try:

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>527</width>
-    <height>257</height>
+    <width>469</width>
+    <height>463</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -20,7 +20,7 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Input Directory with DICOMs: </string>
+         <string>Input Directory:   </string>
         </property>
        </widget>
       </item>
@@ -30,11 +30,11 @@
          <string>Select directory with DICOMs</string>
         </property>
         <property name="toolTipDuration">
-         <number>5</number>
+         <number>10</number>
         </property>
        </widget>
       </item>
-      <item row="1" column="0" colspan="2">
+      <item row="3" column="0" colspan="2">
        <widget class="QLabel" name="inDetailsLabel">
         <property name="text">
          <string>No directory selected</string>
@@ -42,6 +42,15 @@
         <property name="alignment">
          <set>Qt::AlignCenter</set>
         </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QComboBox" name="inputFormatComboBox">
+        <item>
+         <property name="text">
+          <string>*.dcm,*.dicom, *.DICOM,*.DCM</string>
+         </property>
+        </item>
        </widget>
       </item>
      </layout>
@@ -70,6 +79,45 @@
         </property>
        </widget>
       </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QLineEdit" name="prefixLineEdit">
+          <property name="toolTip">
+           <string>Files will be renamed with this prefix, if UUID is not requested</string>
+          </property>
+          <property name="toolTipDuration">
+           <number>5</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="outputFormatComboBox">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <item>
+           <property name="text">
+            <string>.nii.gz</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>.gipl</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>.nrrd</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+       </layout>
+      </item>
       <item row="1" column="0">
        <widget class="QCheckBox" name="useUUIDCheckBox">
         <property name="toolTip">
@@ -83,14 +131,28 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="prefixLineEdit">
-        <property name="toolTip">
-         <string>Files will be renamed with this prefix, if UUID is not requested</string>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="crosswalkCollapsibleButton">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>Preview Crosswalk</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0" colspan="2">
+       <widget class="QTableWidget" name="crosswalkTableWidget">
+        <property name="columnCount">
+         <number>2</number>
         </property>
-        <property name="toolTipDuration">
-         <number>5</number>
-        </property>
+        <column/>
+        <column/>
        </widget>
       </item>
      </layout>
