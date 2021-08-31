@@ -59,6 +59,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print("In init")
     self.input_image_list = {}
     self.output_dir = None
+    self.setParameterNode(None)
 
   def setup(self):
     """
@@ -93,12 +94,25 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.useUUIDCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
     self.ui.inDirButton.connect('directoryChanged(QString)', self.onInputDirChanged)
     self.ui.outDirButton.connect('directoryChanged(QString)', self.onOutputDirChanged)
-
+    self.ui.outputFormatComboBox.connect("currentIndexChanged(int)", self.updateParameterNodeFromGUI)
+    self.ui.prefixLineEdit.connect("textChanged(QString)",  self.updateParameterNodeFromGUI)
+    self.ui.crosswalkTableWidget.currentItemChanged.connect(self.onCrossWalkRowChanged)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+
+  def onCrossWalkRowChanged(self, current, previous):
+    if previous==None:
+      return
+    prev_row = previous.row()
+    for d in self.input_image_list:
+      if self.input_image_list[d][0] == prev_row:
+        if previous.text() != self.input_image_list[d][1]:
+          self.input_image_list[d][1] = previous.text()
+          self.input_image_list[d][2] = True
+          self.updateParameterNodeFromGUI()
 
   def onInputDirChanged(self, dir_name):
     input_path = Path(str(dir_name))
@@ -115,10 +129,13 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       for im in input_image_list:
         dir_set.add(im.parent)
     if len(dir_set) > 0:
+      self.input_image_list = {}
       # This would be the list of directories (i.e. one full scan image in one directory)
       for idx, d in enumerate(dir_set):
-        self.input_image_list[d] = [idx,""]
+        # third element keeps track of manual edits. False: auto, True is manual
+        self.input_image_list[d] = [idx,"", False]
     self.updateParameterNodeFromGUI()
+    print(self.input_image_list)
 
   def onOutputDirChanged(self, dir_name):
     output_dir = Path(str(dir_name))
@@ -139,6 +156,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called each time the user opens this module.
     """
     # Make sure parameter node exists and observed
+    print("In enter")
     self.initializeParameterNode()
 
   def exit(self):
@@ -153,6 +171,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called just before the scene is closed.
     """
     # Parameter node will be reset, do not use it anymore
+    print("In on scene starting to close")
     self.setParameterNode(None)
 
   def onSceneEndClose(self, caller, event):
@@ -161,6 +180,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # If this module is shown while the scene is closed then recreate a new parameter node immediately
     if self.parent.isEntered:
+      print("Parent entered")
       self.initializeParameterNode()
 
   def initializeParameterNode(self):
@@ -169,6 +189,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Parameter node stores all user choices in parameter values, node selections, etc.
     # so that when the scene is saved and reloaded, these settings are restored.
+    print("initialize parameter node")
     self.setParameterNode(self.logic.getParameterNode())
 
   def setParameterNode(self, inputParameterNode):
@@ -187,6 +208,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self._parameterNode is not None:
       self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
     # Initial GUI update
+    print("In setparameternode")
     self.updateGUIFromParameterNode()
 
   def updateGUIFromParameterNode(self, caller=None, event=None):
@@ -201,6 +223,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
+    print("Who is calling me?")
     print(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.inDetailsLabel.setText(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.useUUIDCheckBox.checked = (self._parameterNode.GetParameter("UseUUID") == "true")
@@ -219,6 +242,36 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                                   self.output_dir is not None and \
                                   self.output_dir.exists() and \
                                   prefix_condition)
+    #Update the crosswalk dict and text here
+    self.ui.crosswalkTableWidget.setRowCount(len(self.input_image_list))
+    self.ui.crosswalkTableWidget.setHorizontalHeaderLabels(["Output file name", "Target for input"])
+    self.ui.crosswalkTableWidget.horizontalHeader().setVisible(True)
+    if len(self.input_image_list) > 0:
+      for k in self.input_image_list:
+        entry =  self.input_image_list[k]
+        index = entry[0]
+        print("index: {}".format(index))
+        out_format = self._parameterNode.GetParameter("OutputFormat")
+        if entry[2]:
+          # Filename was edited manually.
+          print("File name was edited manually, does it have output format?")
+          # Make sure that the filename has an output format.
+          filename = entry[1]
+        elif (self._parameterNode.GetParameter("UseUUID") == "true"):
+          filename = str(uuid.uuid4())
+        else:
+          filename = (self._parameterNode.GetParameter("OutputPrefix")+ "_%04d"%index)
+        self.input_image_list[k][1]=filename
+        newItem = qt.QTableWidgetItem(filename)
+        newItem.setToolTip(filename)
+        self.ui.crosswalkTableWidget.setItem(index, 0, newItem)
+
+        newItem1 = qt.QTableWidgetItem(k)
+        newItem1.setToolTip(str(k))
+        newItem1.setFlags(newItem1.flags() & ~qt.Qt.ItemIsEditable)
+        self.ui.crosswalkTableWidget.setItem(index, 1, newItem1)
+    self.ui.crosswalkTableWidget.resizeColumnToContents(1)
+
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -227,12 +280,11 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This method is called when the user makes any change in the GUI.
     The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
     """
-
+    print('Called')
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
     self._parameterNode.SetParameter("InListDetailsString", "Will anonymize: " + str(len(self.input_image_list)) + " images")
     self._parameterNode.SetParameter("UseUUID", "true" if self.ui.useUUIDCheckBox.checked else "false")
     self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text)
@@ -249,8 +301,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     try:
       # Compute output
-      self.logic.process(self.input_image_list, self.output_dir, self.ui.useUUIDCheckBox.checked, \
-                           self.ui.prefixLineEdit.text, self.ui.outputFormatComboBox.currentText)
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -289,7 +340,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     parameterNode.SetParameter("OutputFormat", ".nii.gz")
 
 
-  def process(self, input_image_list, output_dir, useUUID, prefix, out_format):
+  def process(self, input_image_list, output_dir, out_format):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -300,8 +351,12 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     :param showResult: show output volume in slice viewers
     """
 
-    if len(input_image_list) == 0 or not output_dir.exists() or len(prefix) == 0:
+    if len(input_image_list) == 0 or not output_dir.exists():
       raise ValueError("Input or output specified is invalid")
+
+    if out_format == ".dcm":
+      slicer.util.errorDisplay("Export to dicom format still not supported")
+      return
 
     import time
     startTime = time.time()
@@ -347,16 +402,9 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
             try:
               loadable = scalarVolumeReader.examineForImport([files])[0]
               image_node = scalarVolumeReader.load(loadable)
-              if useUUID:
-                filename = str(uuid.uuid4()) + out_format
-              else:
-                out_idx = input_image_list[imgpath][0]
-                filename = (prefix+ "_%04d"%out_idx + out_format)
+              filename = input_image_list[imgpath][1] + out_format
               out_path = output_dir / filename
-              if out_format == ".dcm":
-                slicer.util.errorDisplay("Export to dicom format still not supported")
-              else:
-                slicer.util.saveNode(image_node, str(out_path))
+              slicer.util.saveNode(image_node, str(out_path))
             except Exception as e:
               logging.error("Error reading/writing file: {}".format(imgpath))
               if image_node is not None:
