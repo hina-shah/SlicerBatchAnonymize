@@ -27,7 +27,11 @@ class DSCI_Anonymize(ScriptedLoadableModule):
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Hina Shah (UNC Chapel Hill.)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
-    self.parent.helpText = "Helper tool for anonymizing multiple DICOM series/files."
+    self.parent.helpText = "Helper tool for anonymizing multiple DICOM series/files.\n \
+      In the 'Inputs' section point to the directory with the datasets \n \
+      In the 'Outputs' section specify a prefix for the files, and the output format \n \
+      The 'Preview Crosswalk' gives a preview of the dicom series and the target file names. \
+      Users can change the file names to something else if so desired. "
 
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = ""
@@ -100,6 +104,14 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+    slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpYellowSliceView)
+    #self.layoutWidget.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutSideBySideView)
+    self.isSingleModuleShown = False
+    slicer.util.mainWindow().setWindowTitle("DSCI Anonymization tool")
+    self.showSingleModule(True)
+    shortcut = qt.QShortcut(slicer.util.mainWindow())
+    shortcut.setKey(qt.QKeySequence("Ctrl+Shift+b"))
+    shortcut.connect('activated()', lambda: self.showSingleModule(toggle=True))
 
   def onCrossWalkRowChanged(self, current, previous):
     if previous==None:
@@ -141,6 +153,32 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
     self.output_dir = output_dir
     self.updateParameterNodeFromGUI()
+
+  def showSingleModule(self, singleModule=True, toggle=False):
+      if toggle:
+        singleModule = not self.isSingleModuleShown
+
+      self.isSingleModuleShown = singleModule
+
+      if singleModule:
+        # We hide all toolbars, etc. which is inconvenient as a default startup setting,
+        # therefore disable saving of window setup.
+        settings = qt.QSettings()
+        settings.setValue('MainWindow/RestoreGeometry', 'false')
+
+      keepToolbars = [
+        #slicer.util.findChild(slicer.util.mainWindow(), 'MainToolBar'),
+        # slicer.util.findChild(slicer.util.mainWindow(), 'ViewToolBar'),
+        # slicer.util.findChild(slicer.util.mainWindow(), 'ViewersToolBar')
+         ]
+      slicer.util.setToolbarsVisible(not singleModule, keepToolbars)
+      slicer.util.setMenuBarsVisible(not singleModule)
+      slicer.util.setApplicationLogoVisible(not singleModule)
+      slicer.util.setModulePanelTitleVisible(not singleModule)
+      slicer.util.setDataProbeVisible(not singleModule)
+
+      if singleModule:
+        slicer.util.setPythonConsoleVisible(self.developerMode)
 
   def cleanup(self):
     """
@@ -456,8 +494,6 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     #     slicer.mrmlScene.RemoveNode(image_node)
     #     crosswalk.append( {"input": imgpath, "output" : out_path})
     # progress.setValue(len(input_image_list))
-
-
 
 #
 # DSCI_AnonymizeTest
