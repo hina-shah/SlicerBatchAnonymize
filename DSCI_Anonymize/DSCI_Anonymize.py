@@ -99,6 +99,10 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.outputFormatComboBox.connect("currentIndexChanged(int)", self.updateParameterNodeFromGUI)
     self.ui.prefixLineEdit.connect("textChanged(QString)",  self.updateParameterNodeFromGUI)
     self.ui.crosswalkTableWidget.currentItemChanged.connect(self.onCrossWalkRowChanged)
+    #self.ui.crosswalkTableWidget.itemChanged.connect(self.testSignal)
+    self.ui.crosswalkTableWidget.itemPressed.connect(self.setManualEditOn)
+    self.ui.crosswalkTableWidget.itemChanged.connect(self.testSignal)
+    self.manualEditOn = False
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -112,6 +116,20 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     shortcut = qt.QShortcut(slicer.util.mainWindow())
     shortcut.setKey(qt.QKeySequence("Ctrl+Shift+b"))
     shortcut.connect('activated()', lambda: self.showSingleModule(toggle=True))
+
+  def setManualEditOn(self, item):
+    self.manualEditOn = True
+
+  def testSignal(self, item):
+    if self.manualEditOn:
+      row = item.row()
+      for d in self.input_image_list:
+        if self.input_image_list[d][0] == row:
+          if item.text() != self.input_image_list[d][1]:
+            self.input_image_list[d][1] = item.text()
+            self.input_image_list[d][2] = True
+            self.updateParameterNodeFromGUI()
+      self.manualEditOn = False
 
   def onCrossWalkRowChanged(self, current, previous):
     if previous==None:
@@ -409,7 +427,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     progress.reset()
     #progress.setWindowModality(qt.Qt.WindowModal)
     for idx, imgpath in enumerate(list(input_image_list.keys())):
-      progress.setValue(idx)
+      progress.setValue(idx+1)
       if progress.wasCanceled:
         break
       dutils.importDicom( imgpath, slicerdb)
@@ -426,7 +444,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
       for patient in slicerdb.patients():
         for study in slicerdb.studiesForPatient(patient):
           for series in slicerdb.seriesForStudy(study):
-            self.reportProgress("Anonymizing and Exporting", idx*100.0/len(input_image_list))
+            self.reportProgress("Anonymizing and Exporting", (idx+1)*100.0/len(input_image_list))
             print('looking at series ' + series + ' for patient ' + patient)
             files = slicerdb.filesForSeries(series)
             imgpath =  Path(files[0]).parent
@@ -450,8 +468,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
               idx+=1
     except Exception as e:
       logging.error("Export aborted")
-    finally:
-      slicer.progressWindow.close()
+    slicer.progressWindow.close()
 
     if len(crosswalk) > 0:
       try:
