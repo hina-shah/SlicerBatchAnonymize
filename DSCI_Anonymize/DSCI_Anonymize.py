@@ -339,6 +339,17 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     parameterNode.SetParameter("InputFormat", "*.dcm,*.dicom,*.DICOM,*.DCM")
     parameterNode.SetParameter("OutputFormat", ".nii.gz")
 
+  def reportProgress(self, msg, percentage):
+    # Abort download if cancel is clicked in progress bar
+    if slicer.progressWindow.wasCanceled:
+      raise Exception("process aborted")
+    # Update progress window
+    slicer.progressWindow.show()
+    slicer.progressWindow.activateWindow()
+    slicer.progressWindow.setValue(int(percentage))
+    slicer.progressWindow.setLabelText(msg)
+    # Process events to allow screen to refresh
+    slicer.app.processEvents()
 
   def process(self, input_image_list, output_dir, out_format):
     """
@@ -377,45 +388,45 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
       if progress.wasCanceled:
         break
       dutils.importDicom( imgpath, slicerdb)
-    print("Done importing to Slicer DICOM Database")
     progress.setValue(len(input_image_list))
     progress.reset()
+    print("Done importing to Slicer DICOM Database")
+    del progress
 
     # # progress.setWindowModality(qt.Qt.WindowModal)
-    progress.setLabelText("Anonymizing and exporting")
-    progress.setCancelButtonText("Abort export")
-    progress.reset()
-    idx = 0
     scalarVolumeReader = DICOMScalarVolumePlugin.DICOMScalarVolumePluginClass()
-    for patient in slicerdb.patients():
-      for study in slicerdb.studiesForPatient(patient):
-        for series in slicerdb.seriesForStudy(study):
-          if progress.wasCanceled:
-            break
-          print('looking at series ' + series + ' for patient ' + patient)
-          files = slicerdb.filesForSeries(series)
-          imgpath =  Path(files[0]).parent
-          print("Path for this series : {}".format(imgpath))
-          if imgpath in input_image_list:
-            print("Will export this")
-            progress.setValue(idx)
-            try:
-              loadable = scalarVolumeReader.examineForImport([files])[0]
-              image_node = scalarVolumeReader.load(loadable)
-              filename = input_image_list[imgpath][1] + out_format
-              out_path = output_dir / filename
-              slicer.util.saveNode(image_node, str(out_path))
-            except Exception as e:
-              logging.error("Error reading/writing file: {}".format(imgpath))
-              if image_node is not None:
+    slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting',autoClose=True)
+    idx = 0
+    try:
+      for patient in slicerdb.patients():
+        for study in slicerdb.studiesForPatient(patient):
+          for series in slicerdb.seriesForStudy(study):
+            self.reportProgress("Anonymizing and Exporting", idx*100.0/len(input_image_list))
+            print('looking at series ' + series + ' for patient ' + patient)
+            files = slicerdb.filesForSeries(series)
+            imgpath =  Path(files[0]).parent
+            print("Path for this series : {}".format(imgpath))
+            if imgpath in input_image_list:
+              print("Will export this")
+              try:
+                loadable = scalarVolumeReader.examineForImport([files])[0]
+                image_node = scalarVolumeReader.load(loadable)
+                filename = input_image_list[imgpath][1] + out_format
+                out_path = output_dir / filename
+                slicer.util.saveNode(image_node, str(out_path))
+              except Exception as e:
+                logging.error("Error reading/writing file: {}".format(imgpath))
+                if image_node is not None:
+                  slicer.mrmlScene.RemoveNode(image_node)
+                error_files.append(imgpath)
+              else:
                 slicer.mrmlScene.RemoveNode(image_node)
-              error_files.append(imgpath)
-            else:
-              slicer.mrmlScene.RemoveNode(image_node)
-              crosswalk.append( {"input": imgpath, "output" : out_path})
-            idx+=1
-
-    progress.setValue(len(input_image_list))
+                crosswalk.append( {"input": imgpath, "output" : out_path})
+              idx+=1
+    except Exception as e:
+      logging.error("Export aborted")
+    finally:
+      slicer.progressWindow.close()
 
     if len(crosswalk) > 0:
       try:
