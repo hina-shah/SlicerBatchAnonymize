@@ -129,6 +129,11 @@
             <string>.nrrd</string>
            </property>
           </item>
+          <item>
+           <property name="text">
+            <string>.dcm</string>
+           </property>
+          </item>
          </widget>
         </item>
        </layout>

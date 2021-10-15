@@ -93,6 +93,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
+    self.ui.inputFormatComboBox.connect("currentIndexChanged(int)", self.onInputFormatChanged)
     self.ui.useUUIDCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
     self.ui.inDirButton.connect('directoryChanged(QString)', self.onInputDirChanged)
     self.ui.outDirButton.connect('directoryChanged(QString)', self.onOutputDirChanged)
@@ -123,10 +124,12 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def testSignal(self, item):
     if self.manualEditOn:
       row = item.row()
+      col = item.column()
       for d in self.input_image_list:
         if self.input_image_list[d][0] == row:
-          if item.text() != self.input_image_list[d][1]:
-            self.input_image_list[d][1] = item.text()
+          row_text = self.ui.crosswalkTableWidget.item(row, 0).text()
+          if row_text != self.input_image_list[d][1]:
+            self.input_image_list[d][1] = row_text
             self.input_image_list[d][2] = True
             self.updateParameterNodeFromGUI()
       self.manualEditOn = False
@@ -137,10 +140,17 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     prev_row = previous.row()
     for d in self.input_image_list:
       if self.input_image_list[d][0] == prev_row:
-        if previous.text() != self.input_image_list[d][1]:
-          self.input_image_list[d][1] = previous.text()
+        # Get the new file name in column 0 for the previous row, compare and set
+        prev_row_text = self.ui.crosswalkTableWidget.item(prev_row, 0).text()
+        if prev_row_text != self.input_image_list[d][1]:
+          self.input_image_list[d][1] = prev_row_text
           self.input_image_list[d][2] = True
           self.updateParameterNodeFromGUI()
+
+  def onInputFormatChanged(self):
+    dir_name = self.ui.inDirButton.directory
+    print(dir_name)
+    self.onInputDirChanged(dir_name)
 
   def onInputDirChanged(self, dir_name):
     input_path = Path(str(dir_name))
@@ -150,18 +160,22 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Get the list of images:
     input_image_list = []
     input_pattern = self.ui.inputFormatComboBox.currentText.split(',')
+    print(input_pattern)
     for pattern in input_pattern:
+      logging.info("Finding: " + pattern)
       input_image_list.extend( list(input_path.glob("**/" + pattern)))
     dir_set = set()
     if len(input_image_list) > 0:
       for im in input_image_list:
         dir_set.add(im.parent)
+        logging.info("Adding a parent: " + str(im.parent))
     if len(dir_set) > 0:
       self.input_image_list = {}
       # This would be the list of directories (i.e. one full scan image in one directory)
       for idx, d in enumerate(dir_set):
         # third element keeps track of manual edits. False: auto, True is manual
         self.input_image_list[d] = [idx,"", False]
+        logging.info("Create: " + str(idx))
     self.updateParameterNodeFromGUI()
 
   def onOutputDirChanged(self, dir_name):
@@ -282,7 +296,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.outputFormatComboBox.setCurrentIndex(outIndex)
 
     formatText = self._parameterNode.GetParameter("InputFormat")
-    outIndex = max(0, self.ui.outputFormatComboBox.findText(formatText))
+    outIndex = max(0, self.ui.inputFormatComboBox.findText(formatText))
     self.ui.inputFormatComboBox.setCurrentIndex(outIndex)
 
     prefix_condition = (not self.ui.useUUIDCheckBox.checked and len(self.ui.prefixLineEdit.text) > 0) or self.ui.useUUIDCheckBox.checked
@@ -408,10 +422,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     if len(input_image_list) == 0 or not output_dir.exists():
       raise ValueError("Input or output specified is invalid")
 
-    if out_format == ".dcm":
-      slicer.util.errorDisplay("Export to dicom format still not supported")
-      return
-
+    
     import time
     startTime = time.time()
     logging.info('Processing started')
@@ -445,18 +456,41 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
         for study in slicerdb.studiesForPatient(patient):
           for series in slicerdb.seriesForStudy(study):
             self.reportProgress("Anonymizing and Exporting", (idx+1)*100.0/len(input_image_list))
-            print('looking at series ' + series + ' for patient ' + patient)
             files = slicerdb.filesForSeries(series)
             imgpath =  Path(files[0]).parent
-            print("Path for this series : {}".format(imgpath))
             if imgpath in input_image_list:
-              print("Will export this")
+              print("Will export this: " + str(imgpath))
               try:
                 loadable = scalarVolumeReader.examineForImport([files])[0]
                 image_node = scalarVolumeReader.load(loadable)
-                filename = input_image_list[imgpath][1] + out_format
-                out_path = output_dir / filename
-                slicer.util.saveNode(image_node, str(out_path))
+                if image_node.GetImageData().GetDimensions()[2] == 1:
+                  logging.warning("Image has only one slice, ignoring")
+                  slicer.mrmlScene.RemoveNode(image_node)
+                  continue
+                if out_format == ".dcm":
+                  output_folder = output_dir / input_image_list[imgpath][1]
+                  output_folder.mkdir(parents=True, exist_ok=True)
+                  # Create patient and study and put the volume under the study
+                  shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
+                  patientItemID = shNode.CreateSubjectItem(shNode.GetSceneItemID(), input_image_list[imgpath][1])
+                  studyItemID = shNode.CreateStudyItem(patientItemID, input_image_list[imgpath][1]+'_Study')
+                  volumeShItemID = shNode.GetItemByDataNode(image_node)
+                  shNode.SetItemParent(volumeShItemID, studyItemID)
+                  exporter = DICOMScalarVolumePlugin.DICOMScalarVolumePluginClass()
+                  exportables = exporter.examineForExport(volumeShItemID)
+                  if len(exportables) == 0:
+                    logging.error("Cannot export this image (either 1 image or no image in the series)")
+                    slicer.mrmlScene.RemoveNode(image_node)
+                    continue
+                  for exp in exportables:
+                    exp.directory = output_folder
+                  exporter.export(exportables)
+                  slicer.mrmlScene.RemoveNode(shNode)
+                  out_path = output_folder / ('ScalarVolume_' + str(exportables[0].subjectHierarchyItemID))
+                else:
+                  filename = input_image_list[imgpath][1] + out_format
+                  out_path = output_dir / filename
+                  slicer.util.saveNode(image_node, str(out_path))
               except Exception as e:
                 logging.error("Error reading/writing file: {}".format(imgpath))
                 if image_node is not None:
@@ -467,7 +501,7 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
                 crosswalk.append( {"input": imgpath, "output" : out_path})
               idx+=1
     except Exception as e:
-      logging.error("Export aborted")
+      logging.error("Export aborted: {}".format(e))
     slicer.progressWindow.close()
 
     if len(crosswalk) > 0:
@@ -558,3 +592,4 @@ class DSCI_AnonymizeTest(ScriptedLoadableModuleTest):
     logic.process(None, None)
 
     self.delayDisplay('Test passed')
+ 
