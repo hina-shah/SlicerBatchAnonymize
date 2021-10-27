@@ -62,6 +62,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = False
     self.input_image_list = {}
     self.output_dir = None
+    self.input_path = None
     self.setParameterNode(None)
 
   def setup(self):
@@ -153,9 +154,9 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.onInputDirChanged(dir_name)
 
   def onInputDirChanged(self, dir_name):
-    input_path = Path(str(dir_name))
-    if not input_path.exists():
-      logging.error('The directory {} does not exist'.format(input_path))
+    self.input_path = Path(str(dir_name))
+    if not self.input_path.exists():
+      logging.error('The directory {} does not exist'.format(self.input_path))
       return
     # Get the list of images:
     input_image_list = []
@@ -163,19 +164,17 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print(input_pattern)
     for pattern in input_pattern:
       logging.info("Finding: " + pattern)
-      input_image_list.extend( list(input_path.glob("**/" + pattern)))
+      input_image_list.extend( list(self.input_path.glob("**/" + pattern)))
     dir_set = set()
     if len(input_image_list) > 0:
       for im in input_image_list:
         dir_set.add(im.parent)
-        logging.info("Adding a parent: " + str(im.parent))
+    self.input_image_list = {}
     if len(dir_set) > 0:
-      self.input_image_list = {}
       # This would be the list of directories (i.e. one full scan image in one directory)
-      for idx, d in enumerate(dir_set):
+      for idx, d in enumerate(sorted(dir_set)):
         # third element keeps track of manual edits. False: auto, True is manual
         self.input_image_list[d] = [idx,"", False]
-        logging.info("Create: " + str(idx))
     self.updateParameterNodeFromGUI()
 
   def onOutputDirChanged(self, dir_name):
@@ -324,7 +323,13 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         newItem.setToolTip(filename)
         self.ui.crosswalkTableWidget.setItem(index, 0, newItem)
 
-        newItem1 = qt.QTableWidgetItem(k)
+        try:
+          rel_path = Path(k).relative_to(self._parameterNode.GetParameter("InputDirectory"))
+          print(k)
+          print(self._parameterNode.GetParameter("InputDirectory"))
+          newItem1 = qt.QTableWidgetItem(rel_path)
+        except ValueError as e:
+          newItem1 = qt.QTableWidgetItem(k)
         newItem1.setToolTip(str(k))
         newItem1.setFlags(newItem1.flags() & ~qt.Qt.ItemIsEditable)
         self.ui.crosswalkTableWidget.setItem(index, 1, newItem1)
@@ -345,7 +350,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetParameter("InListDetailsString", "Will anonymize: " + str(len(self.input_image_list)) + " images")
     self._parameterNode.SetParameter("UseUUID", "true" if self.ui.useUUIDCheckBox.checked else "false")
     self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text)
-    self._parameterNode.SetParameter("InputDirectory", self.ui.inDirButton.text)
+    self._parameterNode.SetParameter("InputDirectory", self.ui.inDirButton.directory)
     self._parameterNode.SetParameter("OutputDirectory", self.ui.outDirButton.text)
     self._parameterNode.SetParameter("InputFormat", self.ui.inputFormatComboBox.currentText)
     self._parameterNode.SetParameter("OutputFormat", self.ui.outputFormatComboBox.currentText)
