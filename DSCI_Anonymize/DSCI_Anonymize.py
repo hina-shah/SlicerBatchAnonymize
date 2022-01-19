@@ -437,7 +437,26 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     # read the input directory for dicoms,
     slicerdb = slicer.dicomDatabase
     if not slicerdb.isOpen:
-        raise OSError('Slicer DICOM module or database cannot be accessed')
+        # Get the directory path for the Slicer database, and try to open it.
+        slicer.dicomDatabaseDirectorySettingsKey = 'DatabaseDirectory_'+ctk.ctkDICOMDatabase().schemaVersion()
+        settings = qt.QSettings()
+        databaseDirectory = settings.value(slicer.dicomDatabaseDirectorySettingsKey)
+        if not databaseDirectory:
+          documentsLocation = qt.QStandardPaths.DocumentsLocation
+          documents = qt.QStandardPaths.writableLocation(documentsLocation)
+          databaseDirectory = os.path.join(documents, slicer.app.applicationName+"DICOMDatabase")
+          settings.setValue(slicer.dicomDatabaseDirectorySettingsKey, databaseDirectory)
+        if not os.path.exists(databaseDirectory):
+            print("Creating the database directory")
+            os.mkdir(databaseDirectory)
+        databaseFileName = databaseDirectory + "/ctkDICOM.sql"
+        print("Will try to open at: {}".format(databaseFileName))
+        slicer.dicomDatabase.openDatabase(databaseFileName)
+        slicerdb = slicer.dicomDatabase
+        if not slicerdb.isOpen:
+          raise OSError('Slicer DICOM database cannot be accessed/generated. Tried at: {}'.format(databaseDirectory))
+        else:
+          logging.info("Generated Slicer DICOM Database at: {}".format(databaseDirectory))
 
     progress = qt.QProgressDialog("Importing DICOM Data to database", "Abort Load", 0, len(input_image_list))
     progress.reset()
