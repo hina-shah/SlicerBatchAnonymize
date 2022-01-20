@@ -1,4 +1,4 @@
-# DSCI_Anonymizer
+# SlicerBatchAnonymize
 This project is in active development
 
 This is a Slicer extension that provides a user friendly interface to anonymize a 'batch' of DICOM images. 

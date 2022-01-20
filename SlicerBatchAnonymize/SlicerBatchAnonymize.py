@@ -12,17 +12,17 @@ import csv
 import uuid
 
 #
-# DSCI_Anonymize
+# SlicerBatchAnonymize
 #
 
-class DSCI_Anonymize(ScriptedLoadableModule):
+class SlicerBatchAnonymize(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "DSCI_Anonymize"  # TODO: make this more human readable by adding spaces
+    self.parent.title = "SlicerBatchAnonymize"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["DSCI"]  # TODO: set categories (folders where the module shows up in the module selector)
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Hina Shah (UNC Chapel Hill.)"]  # TODO: replace with "Firstname Lastname (Organization)"
@@ -38,15 +38,15 @@ class DSCI_Anonymize(ScriptedLoadableModule):
 
 """
 This is an example of scripted loadable module bundled in an extension.
-See more information in <a href="https://github.com/organization/projectname#DSCI_Anonymize">module documentation</a>.
+See more information in <a href="https://github.com/organization/projectname#SlicerBatchAnonymize">module documentation</a>.
 This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
 """
 
 #
-# DSCI_AnonymizeWidget
+# SlicerBatchAnonymizeWidget
 #
-class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """Uses ScriptedLoadableModuleWidget base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
@@ -73,7 +73,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Load widget from .ui file (created by Qt Designer).
     # Additional widgets can be instantiated manually and added to self.layout.
-    uiWidget = slicer.util.loadUI(self.resourcePath('UI/DSCI_Anonymize.ui'))
+    uiWidget = slicer.util.loadUI(self.resourcePath('UI/SlicerBatchAnonymize.ui'))
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
@@ -84,7 +84,7 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Create logic class. Logic implements all computations that should be possible to run
     # in batch mode, without a graphical user interface.
-    self.logic = DSCI_AnonymizeLogic()
+    self.logic = SlicerBatchAnonymizeLogic()
 
     # Connections
 
@@ -370,10 +370,10 @@ class DSCI_AnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       traceback.print_exc()
 
 #
-# DSCI_AnonymizeLogic
+# SlicerBatchAnonymizeLogic
 #
 
-class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
+class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
   """This class should implement all the actual
   computation done by your module.  The interface
   should be such that other python code can import
@@ -571,10 +571,10 @@ class DSCI_AnonymizeLogic(ScriptedLoadableModuleLogic):
     # progress.setValue(len(input_image_list))
 
 #
-# DSCI_AnonymizeTest
+# SlicerBatchAnonymizeTest
 #
 
-class DSCI_AnonymizeTest(ScriptedLoadableModuleTest):
+class SlicerBatchAnonymizeTest(ScriptedLoadableModuleTest):
   """
   This is the test case for your scripted module.
   Uses ScriptedLoadableModuleTest base class, available at:
@@ -590,9 +590,9 @@ class DSCI_AnonymizeTest(ScriptedLoadableModuleTest):
     """Run as few or as many tests as needed here.
     """
     self.setUp()
-    self.test_DSCI_Anonymize1()
+    self.test_SlicerBatchAnonymize1()
 
-  def test_DSCI_Anonymize1(self):
+  def test_SlicerBatchAnonymize1(self):
     """ Ideally you should have several levels of tests.  At the lowest level
     tests should exercise the functionality of the logic with different inputs
     (both valid and invalid).  At higher levels your tests should emulate the
@@ -610,7 +610,7 @@ class DSCI_AnonymizeTest(ScriptedLoadableModuleTest):
 
     # Test the module logic
 
-    logic = DSCI_AnonymizeLogic()
+    logic = SlicerBatchAnonymizeLogic()
 
     # Test algorithm with non-inverted threshold
     logic.process(None, None)

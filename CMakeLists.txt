@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.13.4)
 
-project(DSCI_Anonymizer)
+project(SlicerBatchAnonymize)
 
 #-----------------------------------------------------------------------------
 # Extension meta-information
-set(EXTENSION_HOMEPAGE "https://www.slicer.org/wiki/Documentation/Nightly/Extensions/DSCI_Anonymizer")
+set(EXTENSION_HOMEPAGE "https://github.com/hina-shah/DSCI_Anonymizer")
 set(EXTENSION_CATEGORY "DSCI")
 set(EXTENSION_CONTRIBUTORS "Hina Shah (UNC Chapel Hill)")
-set(EXTENSION_DESCRIPTION "This is an example of a simple extension")
-set(EXTENSION_ICONURL "http://www.example.com/Slicer/Extensions/DSCI_Anonymizer.png")
-set(EXTENSION_SCREENSHOTURLS "http://www.example.com/Slicer/Extensions/DSCI_Anonymizer/Screenshots/1.png")
+set(EXTENSION_DESCRIPTION "SlicerBatchAnonymize is a Slicer extension that provides a user friendly interface to anonymize a 'batch' of DICOM images.")
+set(EXTENSION_ICONURL "https://github.com/hina-shah/DSCI_Anonymizer/blob/main/SlicerBatchAnonymize.png")
+set(EXTENSION_SCREENSHOTURLS "https://github.com/hina-shah/SlicerBatchAnonymize/blob/main/Documentation/GUIPreview.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
 
 #-----------------------------------------------------------------------------

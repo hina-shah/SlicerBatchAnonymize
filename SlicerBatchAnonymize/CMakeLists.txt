@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME DSCI_Anonymize)
+set(MODULE_NAME SlicerBatchAnonymize)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
