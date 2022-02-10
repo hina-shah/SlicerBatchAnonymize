@@ -28,4 +28,4 @@ This is a Slicer extension that provides a user friendly interface to anonymize 
 
 This software is licensed under the terms of the [Apache Licence Version 2.0](LICENSE).
 
-The license file was added at revision 8311a823cf04b674dc325330ae9235b70f0c28a2 on 2022-02-10, but you may consider that the license applies to all prior revisions as well.
+The license file was added at revision [https://github.com/hina-shah/SlicerBatchAnonymize/pull/14/commits/8311a823cf04b674dc325330ae9235b70f0c28a2](8311a82) on 2022-02-10, but you may consider that the license applies to all prior revisions as well.
