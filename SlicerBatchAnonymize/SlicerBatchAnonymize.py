@@ -63,6 +63,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.input_image_list = {}
     self.output_dir = None
     self.input_path = None
+    self.isSingleModuleShown = False
     self.setParameterNode(None)
 
   def setup(self):
@@ -112,12 +113,12 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.initializeParameterNode()
     slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpYellowSliceView)
     #self.layoutWidget.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutSideBySideView)
-    self.isSingleModuleShown = False
     slicer.util.mainWindow().setWindowTitle("DSCI Anonymization tool")
-    self.showSingleModule(True)
+    
     shortcut = qt.QShortcut(slicer.util.mainWindow())
     shortcut.setKey(qt.QKeySequence("Ctrl+Shift+b"))
     shortcut.connect('activated()', lambda: self.showSingleModule(toggle=True))
+    self.showSingleModule(self.isSingleModuleShown)
 
   def setManualEditOn(self, item):
     self.manualEditOn = True
@@ -424,6 +425,9 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     :param showResult: show output volume in slice viewers
     """
 
+    if input_image_list is None or output_dir is None or out_format is None:
+      return
+
     if len(input_image_list) == 0 or not output_dir.exists():
       raise ValueError("Input or output specified is invalid")
 
@@ -613,7 +617,7 @@ class SlicerBatchAnonymizeTest(ScriptedLoadableModuleTest):
     logic = SlicerBatchAnonymizeLogic()
 
     # Test algorithm with non-inverted threshold
-    logic.process(None, None)
+    logic.process(None, None, None)
 
     self.delayDisplay('Test passed')
  
