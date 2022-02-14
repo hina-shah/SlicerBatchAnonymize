@@ -34,7 +34,7 @@ class SlicerBatchAnonymize(ScriptedLoadableModule):
       Users can change the file names to something else if so desired. "
 
     # TODO: replace with organization, grant and thanks
-    self.parent.acknowledgementText = "his work was supported by the National Institutes of Dental and Craniofacial Research and Biomedical Imaging and Bioengineering of the National Institutes of Health under Award Number DE024450"
+    self.parent.acknowledgementText = "This work was supported by the National Institutes of Dental and Craniofacial Research and Biomedical Imaging and Bioengineering of the National Institutes of Health under Award Number DE024450"
 
 """
 This is an example of scripted loadable module bundled in an extension.
