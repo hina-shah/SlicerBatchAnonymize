@@ -34,7 +34,7 @@ class SlicerBatchAnonymize(ScriptedLoadableModule):
       Users can change the file names to something else if so desired. "
 
     # TODO: replace with organization, grant and thanks
-    self.parent.acknowledgementText = ""
+    self.parent.acknowledgementText = "his work was supported by the National Institutes of Dental and Craniofacial Research and Biomedical Imaging and Bioengineering of the National Institutes of Health under Award Number DE024450"
 
 """
 This is an example of scripted loadable module bundled in an extension.
@@ -111,7 +111,10 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
-    slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpYellowSliceView)
+    mgr = slicer.app.layoutManager()
+    if mgr is not None:
+      mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUpYellowSliceView)
+
     #self.layoutWidget.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutSideBySideView)
     slicer.util.mainWindow().setWindowTitle("DSCI Anonymization tool")
     
