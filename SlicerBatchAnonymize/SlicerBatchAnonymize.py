@@ -7,7 +7,6 @@ from slicer.util import VTKObservationMixin
 import DICOMLib.DICOMUtils as dutils
 import DICOMScalarVolumePlugin
 
-from pathlib import Path
 import csv
 import uuid
 
@@ -321,7 +320,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
         elif (self._parameterNode.GetParameter("UseUUID") == "true"):
           filename = str(uuid.uuid4())
         else:
-          filename = (self._parameterNode.GetParameter("OutputPrefix")+ "_%04d"%index)
+          filename = (self._parameterNode.GetParameter("OutputPrefix")+ "_%04d"%(index+1))
         self.input_image_list[k][1]=filename
         newItem = qt.QTableWidgetItem(filename)
         newItem.setToolTip(filename)
