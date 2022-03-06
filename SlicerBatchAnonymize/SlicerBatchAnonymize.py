@@ -6,7 +6,7 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 import DICOMLib.DICOMUtils as dutils
 import DICOMScalarVolumePlugin
-
+from pathlib import Path
 import csv
 import uuid
 
@@ -479,7 +479,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
 
     # # progress.setWindowModality(qt.Qt.WindowModal)
     scalarVolumeReader = DICOMScalarVolumePlugin.DICOMScalarVolumePluginClass()
-    slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting',autoClose=True)
+    slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting')
     idx = 0
     try:
       for patient in slicerdb.patients():
