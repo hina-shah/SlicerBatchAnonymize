@@ -536,7 +536,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
 
     if len(crosswalk) > 0:
       try:
-        with open(output_dir/"crosswalk.csv", "w") as f:
+        with open(output_dir/"crosswalk.csv", "w", encoding="utf-8") as f:
           w = csv.DictWriter(f, crosswalk[0].keys())
           w.writeheader()
           w.writerows(crosswalk)
