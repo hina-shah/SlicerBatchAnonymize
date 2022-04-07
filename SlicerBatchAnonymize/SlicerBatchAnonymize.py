@@ -542,7 +542,8 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
           w.writerows(crosswalk)
       except Exception as e:
         logging.error("Failed to write the crosswalk file")
-        slicer.util.errorDisplay("Failed to write the crosswalk file", parent=self.parent)
+        logging.error(e)
+        slicer.util.errorDisplay("Failed to write the crosswalk file")
     if len(error_files) > 0:
       try:
         with open(output_dir / "files_not_converted.txt", "w") as f:
@@ -550,7 +551,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
             f.write(e+"\n")
       except IOError:
         logging.error("Failed to write the list of failed files")
-        slicer.util.errorDisplay("Failed to write the list of failed files", parent=self.parent)
+        slicer.util.errorDisplay("Failed to write the list of failed files")
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
 
