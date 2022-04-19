@@ -104,6 +104,8 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     #self.ui.crosswalkTableWidget.itemChanged.connect(self.testSignal)
     self.ui.crosswalkTableWidget.itemPressed.connect(self.setManualEditOn)
     self.ui.crosswalkTableWidget.itemChanged.connect(self.testSignal)
+    self.ui.progressBar.value = 0
+    self.ui.progressLabel.text = "Nothing to do"
     self.manualEditOn = False
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
@@ -164,7 +166,6 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     # Get the list of images:
     input_image_list = []
     input_pattern = self.ui.inputFormatComboBox.currentText.split(',')
-    print(input_pattern)
     for pattern in input_pattern:
       logging.info("Finding: " + pattern)
       input_image_list.extend( list(self.input_path.glob("**/" + pattern)))
@@ -288,11 +289,14 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    print(self._parameterNode.GetParameter("InListDetailsString"))
+    #print(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.inDetailsLabel.setText(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.useUUIDCheckBox.checked = (self._parameterNode.GetParameter("UseUUID") == "true")
     self.ui.prefixLineEdit.setText(self._parameterNode.GetParameter("OutputPrefix"))
     self.ui.prefixLineEdit.setEnabled(not self.ui.useUUIDCheckBox.checked)
+    # self.ui.progressLabel.setText(self._parameterNode.GetParameter("ProgressText"))
+    # self.ui.progressBar.setValue(int(self._parameterNode.GetParameter("ProgressValue")))
+    
     formatText = self._parameterNode.GetParameter("OutputFormat")
     outIndex = max(0, self.ui.outputFormatComboBox.findText(formatText))
     self.ui.outputFormatComboBox.setCurrentIndex(outIndex)
@@ -328,8 +332,8 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
 
         try:
           rel_path = Path(k).relative_to(self._parameterNode.GetParameter("InputDirectory"))
-          print(k)
-          print(self._parameterNode.GetParameter("InputDirectory"))
+          # print(k)
+          # print(self._parameterNode.GetParameter("InputDirectory"))
           newItem1 = qt.QTableWidgetItem(rel_path)
         except ValueError as e:
           newItem1 = qt.QTableWidgetItem(k)
@@ -357,6 +361,8 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self._parameterNode.SetParameter("OutputDirectory", self.ui.outDirButton.text)
     self._parameterNode.SetParameter("InputFormat", self.ui.inputFormatComboBox.currentText)
     self._parameterNode.SetParameter("OutputFormat", self.ui.outputFormatComboBox.currentText)
+    # self._parameterNode.SetParameter("ProgressText", self.ui.progressLabel.text)
+    # self._parameterNode.SetParameter("ProgressValue", str(self.ui.progressBar.value))
     self._parameterNode.EndModify(wasModified)
     self.updateGUIFromParameterNode()
 
@@ -366,7 +372,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     """
     try:
       # Compute output
-      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText)
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText, self.ui.progressBar, self.ui.progressLabel)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -391,6 +397,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     Called when the logic class is instantiated. Can be used for initializing member variables.
     """
     ScriptedLoadableModuleLogic.__init__(self)
+    self.process_cont = False
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -403,20 +410,30 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     parameterNode.SetParameter("OutputDirectory", "")
     parameterNode.SetParameter("InputFormat", "*.dcm,*.dicom,*.DICOM,*.DCM")
     parameterNode.SetParameter("OutputFormat", ".nii.gz")
+    # parameterNode.SetParameter("ProgressText", "Nothing")
+    # parameterNode.SetParameter("ProgressValue", "0")
 
-  def reportProgress(self, msg, percentage):
+  def reportProgress(self, msg, percentage, progressbar, progressmsg):
     # Abort download if cancel is clicked in progress bar
-    if slicer.progressWindow.wasCanceled:
-      raise Exception("process aborted")
-    # Update progress window
-    slicer.progressWindow.show()
-    slicer.progressWindow.activateWindow()
-    slicer.progressWindow.setValue(int(percentage))
-    slicer.progressWindow.setLabelText(msg)
-    # Process events to allow screen to refresh
-    slicer.app.processEvents()
-
-  def process(self, input_image_list, output_dir, out_format):
+    # if slicer.progressWindow.wasCanceled:
+    #   raise Exception("process aborted")
+    # # Update progress window
+    # slicer.progressWindow.show()
+    # slicer.progressWindow.activateWindow()
+    # slicer.progressWindow.setValue(int(percentage))
+    # slicer.progressWindow.setLabelText(msg)
+    # # Process events to allow screen to refresh
+    # slicer.app.processEvents()
+    if progressbar is not None:
+      if percentage == 0:
+        progressbar.reset()
+      progressbar.value = percentage
+      progressbar.update()
+    if progressmsg is not None:
+      progressmsg.text = msg
+      progressmsg.update()
+    
+  def process(self, input_image_list, output_dir, out_format, progressbar=None, progressmsg=None):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -426,7 +443,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
     :param showResult: show output volume in slice viewers
     """
-
+    self.process_cont = True
     if input_image_list is None or output_dir is None or out_format is None:
       return
 
@@ -464,32 +481,46 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
         else:
           logging.info("Generated Slicer DICOM Database at: {}".format(databaseDirectory))
 
-    progress = qt.QProgressDialog("Importing DICOM Data to database", "Abort Load", 0, len(input_image_list))
-    progress.reset()
+    stage = "Importing DICOM Data to database"
+    self.reportProgress(stage, 0, progressbar, progressmsg)
+    #progress = qt.QProgressDialog("Importing DICOM Data to database", "Abort Load", 0, len(input_image_list))
+    #progress.reset()
     #progress.setWindowModality(qt.Qt.WindowModal)
     for idx, imgpath in enumerate(list(input_image_list.keys())):
-      progress.setValue(idx+1)
-      if progress.wasCanceled:
-        break
+      self.reportProgress(stage, (idx+1)*100.0/len(input_image_list), progressbar, progressmsg)
+      if self.process_cont == False:
+        self.reportProgress("Process canceled", 0, progressbar, progressmsg)
+        break      
+      #progress.setValue(idx+1)
+      # if progress.wasCanceled:
+      #   break
       dutils.importDicom( imgpath, slicerdb)
-    progress.setValue(len(input_image_list))
-    progress.reset()
+    # progress.setValue(len(input_image_list))
+    # progress.reset()
     print("Done importing to Slicer DICOM Database")
-    del progress
-
+    #del progress
+    self.reportProgress("Done importing to Slicer DICOM Database", 0, progressbar, progressmsg)
+    slicer.app.processEvents()
     # # progress.setWindowModality(qt.Qt.WindowModal)
+    stage = "Anonymizing and Exporting"
+    self.reportProgress(stage, 0, progressbar, progressmsg)
+    self.process_cont = True
     scalarVolumeReader = DICOMScalarVolumePlugin.DICOMScalarVolumePluginClass()
-    slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting')
+    slicer.app.processEvents()
+    #slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting')
     idx = 0
     try:
       for patient in slicerdb.patients():
         for study in slicerdb.studiesForPatient(patient):
           for series in slicerdb.seriesForStudy(study):
-            self.reportProgress("Anonymizing and Exporting", (idx+1)*100.0/len(input_image_list))
+            if self.process_cont == False:
+              raise Exception("User stopped processing")            
             files = slicerdb.filesForSeries(series)
             imgpath =  Path(files[0]).parent
             if imgpath in input_image_list:
               print("Will export this: " + str(imgpath))
+              self.reportProgress(stage + " : " + str(imgpath), (idx+1)*100.0/len(input_image_list), progressbar, progressmsg)
+              slicer.app.processEvents()
               try:
                 loadable = scalarVolumeReader.examineForImport([files])[0]
                 image_node = scalarVolumeReader.load(loadable)
@@ -531,8 +562,9 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                 crosswalk.append( {"input": imgpath, "output" : out_path})
               idx+=1
     except Exception as e:
+      self.reportProgress("Process canceled", 0, progressbar, progressmsg)
       logging.error("Export aborted: {}".format(e))
-    slicer.progressWindow.close()
+    #slicer.progressWindow.close()
 
     if len(crosswalk) > 0:
       try:
@@ -620,7 +652,7 @@ class SlicerBatchAnonymizeTest(ScriptedLoadableModuleTest):
     logic = SlicerBatchAnonymizeLogic()
 
     # Test algorithm with non-inverted threshold
-    logic.process(None, None, None)
+    logic.process(None, None, None, None, None)
 
     self.delayDisplay('Test passed')
  
