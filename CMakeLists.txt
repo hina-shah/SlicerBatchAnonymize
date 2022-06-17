@@ -8,8 +8,8 @@ set(EXTENSION_HOMEPAGE "https://github.com/hina-shah/SlicerBatchAnonymize")
 set(EXTENSION_CATEGORY "DSCI")
 set(EXTENSION_CONTRIBUTORS "Hina Shah (UNC Chapel Hill)")
 set(EXTENSION_DESCRIPTION "SlicerBatchAnonymize is a Slicer extension that provides a user friendly interface to anonymize a 'batch' of DICOM images.")
-set(EXTENSION_ICONURL "https://github.com/hina-shah/SlicerBatchAnonymize/blob/main/SlicerBatchAnonymize.png")
-set(EXTENSION_SCREENSHOTURLS "https://github.com/hina-shah/SlicerBatchAnonymize/blob/main/Documentation/GUIPreview.png")
+set(EXTENSION_ICONURL "https://raw.githubusercontent.com/hina-shah/SlicerBatchAnonymize/main/SlicerBatchAnonymize.png")
+set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/hina-shah/SlicerBatchAnonymize/main/Documentation/GUIPreview.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
 
 #-----------------------------------------------------------------------------
