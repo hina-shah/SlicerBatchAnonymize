@@ -23,7 +23,7 @@ class SlicerBatchAnonymize(ScriptedLoadableModule):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "SlicerBatchAnonymize"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["DSCI"]  # TODO: set categories (folders where the module shows up in the module selector)
-    self.parent.dependencies = []  # TODO: add here list of module names that this module requires
+    self.parent.dependencies = ['AMASS']  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Hina Shah (UNC Chapel Hill.)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = "Helper tool for anonymizing multiple DICOM series/files.\n \
@@ -292,6 +292,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     #print(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.inDetailsLabel.setText(self._parameterNode.GetParameter("InListDetailsString"))
     self.ui.useUUIDCheckBox.checked = (self._parameterNode.GetParameter("UseUUID") == "true")
+    self.ui.defaceChecBox.checked = (self._parameterNode.GetParameter("Deface") == "true")
     self.ui.prefixLineEdit.setText(self._parameterNode.GetParameter("OutputPrefix"))
     self.ui.prefixLineEdit.setEnabled(not self.ui.useUUIDCheckBox.checked)
     # self.ui.progressLabel.setText(self._parameterNode.GetParameter("ProgressText"))
@@ -356,6 +357,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
     self._parameterNode.SetParameter("InListDetailsString", "Will anonymize: " + str(len(self.input_image_list)) + " images")
     self._parameterNode.SetParameter("UseUUID", "true" if self.ui.useUUIDCheckBox.checked else "false")
+    self._parameterNode.SetParameter("Deface", "true" if self.ui.defaceChecBox.checked else "false")
     self._parameterNode.SetParameter("OutputPrefix", self.ui.prefixLineEdit.text)
     self._parameterNode.SetParameter("InputDirectory", self.ui.inDirButton.directory)
     self._parameterNode.SetParameter("OutputDirectory", self.ui.outDirButton.text)
@@ -372,7 +374,12 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     """
     try:
       # Compute output
-      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText, self.ui.progressBar, self.ui.progressLabel)
+      deface_method = None
+      if self.ui.defaceChecBox.checked:
+        if "CBCT" in self.ui.defaceImageTypeComboBox.currentText:
+          deface_method = "AMASS"
+
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText, deface_method, self.ui.progressBar, self.ui.progressLabel)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -433,7 +440,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       progressmsg.text = msg
       progressmsg.update()
     
-  def process(self, input_image_list, output_dir, out_format, progressbar=None, progressmsg=None):
+  def process(self, input_image_list, output_dir, out_format, deface_method, progressbar=None, progressmsg=None):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -528,6 +535,15 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                   logging.warning("Image has only one slice, ignoring")
                   slicer.mrmlScene.RemoveNode(image_node)
                   continue
+                if deface_method is not None:
+                  out_path = output_dir / "tmp.nii.gz"
+                  slicer.util.saveNode(image_node, str(out_path))
+                  if deface_method not in slicer.util.moduleNmaes():
+                    logging.warning("Required module " + deface_method + " not installed. Please install the corresponding extension, and rerun")
+                    continue
+                  if deface_method == "AMASS":
+                    parameters = {'input': out_path, 'dir_models': '/Users/hinashah/Downloads/FULL_FACE_MODELS', 'high_def': False, 'skul_structure': ['SKIN'], 'merge': ['MERGE'], 'gen_vtk': True, 'save_in_folder': True, 'output_dir': output_dir, 'precision': 0.5, 'vtk_smooth': 5, 'prediction_ID': 'Pred', 'nbr_GPU_worker': 1, 'nbr_CPU_worker': 1, 'temp_fold': '/Users/hinashah/Documents/Slicer_temp_AMASSS', 'merging_order': ['SKIN', 'CV', 'UAW', 'CB', 'MAX', 'MAND', 'CAN', 'RC']}
+                    slicer.cli.run(slicer.modules.amass_cli, None, parameters, wait_for_completion=True, update_display=False)
                 if out_format == ".dcm":
                   output_folder = output_dir / input_image_list[imgpath][1]
                   output_folder.mkdir(parents=True, exist_ok=True)
