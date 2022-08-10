@@ -544,8 +544,9 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       view.mrmlViewNode().SetAxisLabelsVisible(False)
       view.mrmlViewNode().SetBoxVisible(False)
       view.forceRender()
-      numberOfScreenshots = 6
-      axisIndex = [0, 2, 4, 1, 3, 5]  # order of views in the gallery image
+      numberOfScreenshots = 4
+      #axisIndex = [0, 2, 4, 1, 3, 5]  # order of views in the gallery image
+      axisIndex = [3, 0, 1, 4]
       cap = ScreenCapture.ScreenCaptureLogic()
       for screenshotIndex in range(numberOfScreenshots):
           view.rotateToViewAxis(axisIndex[screenshotIndex])
