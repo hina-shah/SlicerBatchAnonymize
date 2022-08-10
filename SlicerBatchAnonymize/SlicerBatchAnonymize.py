@@ -381,7 +381,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
       deface_method = None
       if self.ui.defaceChecBox.checked:
         if "CBCT" in self.ui.defaceImageTypeComboBox.currentText:
-          deface_method = "AMASS"
+          deface_method = "AMASSS"
 
       self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText, deface_method, self.ui.progressBar, self.ui.progressLabel)
     except Exception as e:
@@ -684,14 +684,23 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                   slicer.mrmlScene.RemoveNode(image_node)
                   continue
                 if deface_method is not None:
-                  out_path = output_dir / "tmp.nii.gz"
+                  (output_dir / "Defacing").mkdir(parents=True, exist_ok=True)
+                  out_path = output_dir / ("Defacing/" + input_image_list[imgpath][1] + ".nii.gz")
                   slicer.util.saveNode(image_node, str(out_path))
-                  if deface_method not in slicer.util.moduleNmaes():
+                  if deface_method not in slicer.util.moduleNames():
                     logging.warning("Required module " + deface_method + " not installed. Please install the corresponding extension, and rerun")
                     continue
-                  if deface_method == "AMASS":
-                    parameters = {'input': out_path, 'dir_models': '/Users/hinashah/Downloads/FULL_FACE_MODELS', 'high_def': False, 'skul_structure': ['SKIN'], 'merge': ['MERGE'], 'gen_vtk': True, 'save_in_folder': True, 'output_dir': output_dir, 'precision': 0.5, 'vtk_smooth': 5, 'prediction_ID': 'Pred', 'nbr_GPU_worker': 1, 'nbr_CPU_worker': 1, 'temp_fold': '/Users/hinashah/Documents/Slicer_temp_AMASSS', 'merging_order': ['SKIN', 'CV', 'UAW', 'CB', 'MAX', 'MAND', 'CAN', 'RC']}
-                    slicer.cli.run(slicer.modules.amass_cli, None, parameters, wait_for_completion=True, update_display=False)
+                  if deface_method == "AMASSS":
+                    documentsLocation = qt.QStandardPaths.DocumentsLocation
+                    documents = qt.QStandardPaths.writableLocation(documentsLocation)
+                    modelsPath =  os.path.join(documents, "FULL_FACE_MODELS")
+                    tempPath = qt.QStandardPaths.TempLocation
+                    tempLoc = qt.QStandardPaths.writableLocation(tempPath)
+                    print(str(out_path))
+                    print(str(output_dir/"Defacing"))
+                    parameters = {'inputVolume': str(out_path), 'modelDirectory': modelsPath, 'highDefinition': False, 'skullStructure': "SKIN", 'merge': ['MERGE'], 'genVtk': True, 'save_in_folder': True, 'output_folder': str(output_dir/"Defacing"), 'precision': 50, 'vtk_smooth': 5, 'prediction_ID': 'Pred', 'gpu_usage': 1, 'cpu_usage': 1, 'temp_fold': tempLoc}
+                    print(parameters)
+                    slicer.cli.run(slicer.modules.amasss_cli, None, parameters, wait_for_completion=True, update_display=False)
                 if out_format == ".dcm":
                   output_folder = output_dir / input_image_list[imgpath][1]
                   output_folder.mkdir(parents=True, exist_ok=True)
@@ -717,7 +726,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                   out_path = output_dir / filename
                   slicer.util.saveNode(image_node, str(out_path))
               except Exception as e:
-                logging.error("Error reading/writing file: {}".format(imgpath))
+                logging.error("Error reading/writing file: {} \n {}".format(imgpath, e))
                 if image_node is not None:
                   slicer.mrmlScene.RemoveNode(image_node)
                 error_files.append(imgpath)
@@ -744,7 +753,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       try:
         with open(output_dir / "files_not_converted.txt", "w") as f:
           for e in error_files:
-            f.write(e+"\n")
+            f.write(str(e)+"\n")
       except IOError:
         logging.error("Failed to write the list of failed files")
         slicer.util.errorDisplay("Failed to write the list of failed files")
