@@ -1,4 +1,5 @@
 import os
+from typing_extensions import assert_type
 import unittest
 import logging
 import vtk, qt, ctk, slicer
@@ -6,10 +7,13 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 import DICOMLib.DICOMUtils as dutils
 import DICOMScalarVolumePlugin
+import SimpleITK as sitk
+import sitkUtils
+import numpy as np
 from pathlib import Path
 import csv
 import uuid
-
+import ScreenCapture
 #
 # SlicerBatchAnonymize
 #
@@ -23,7 +27,7 @@ class SlicerBatchAnonymize(ScriptedLoadableModule):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "SlicerBatchAnonymize"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["DSCI"]  # TODO: set categories (folders where the module shows up in the module selector)
-    self.parent.dependencies = ['AMASS']  # TODO: add here list of module names that this module requires
+    self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Hina Shah (UNC Chapel Hill.)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = "Helper tool for anonymizing multiple DICOM series/files.\n \
@@ -439,6 +443,150 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     if progressmsg is not None:
       progressmsg.text = msg
       progressmsg.update()
+  
+  def runDefacing(self, img_path, seg_path, debug = True):
+    """
+    :param img_path :  original input image
+    :param seg_path : path where skin segmentation lives
+    """
+
+    # Read the original image
+    try:
+      volume = slicer.util.loadVolume(img_path)
+    except Exception as e:
+      logging.error(f"Error reading the input volume {img_path}, \n {e}")
+      return False
+    # Read the segmentation in as a labelmap
+
+    try:
+      segmentation_path = list(Path(seg_path).glob("*SKIN-Seg_Pred.nii.gz"))[0]
+      segmentation = slicer.util.loadVolume(str(segmentation_path))
+    except Exception as e:
+      logging.error(f"Error reading the SKIN Segmentation from directory {seg_path}, \n {e}")
+      return False
+
+    # Run closing on labelmap using original pixel spacing
+    ### Get pixel spacing from the oriignal volume:
+    print(f"Spacing for the input volume is: {volume.GetSpacing()}")
+    targetClosingDistance = 20 #mm
+    xClosingRadius = int(targetClosingDistance / volume.GetSpacing()[0])
+    yClosingRadius = int(targetClosingDistance / volume.GetSpacing()[1])
+    zClosingRadius = int(targetClosingDistance / volume.GetSpacing()[2])
+    print(f"Will close by: {[xClosingRadius, yClosingRadius, zClosingRadius]}")
+    # Pull image from Slicer:
+    sitkInputImage = sitkUtils.PullVolumeFromSlicer(segmentation)
+    filter = sitk.BinaryMorphologicalClosingImageFilter()
+    filter.SetKernelRadius([xClosingRadius, yClosingRadius, zClosingRadius])
+    filter.SafeBorderOn()
+    closedImage = filter.Execute(sitkInputImage)
+    
+    # Run dilation step
+    print("Running Extra Dilation")
+    filter = sitk.BinaryDilateImageFilter()
+    filter.SetKernelRadius([3,3,3])
+    filter.SetForegroundValue(1)
+    filter.SetBoundaryToForeground(False)
+    closedDilatedImage = filter.Execute(closedImage)
+
+    if debug:
+      closedDilatedSlicerImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "SegmentationClosedDilated")
+      sitkUtils.PushVolumeToSlicer(closedDilatedImage, closedDilatedSlicerImage, className="vtkMRMLLabelMapVolumeNode")
+
+    # Run Masking
+    # Masking
+    print("Running masking")
+    voxels = slicer.util.arrayFromVolume(volume)
+    mask = sitk.GetArrayFromImage(closedDilatedImage) #slicer.util.arrayFromVolume(closedDilatedSlicerImage)
+    maskedVoxels = np.copy(voxels)  # we don't want to modify the original volume
+    maskedVoxels[mask==0] = 0
+
+    # Write masked volume to volume node and show it
+    if debug:
+      maskedVolumeNode = slicer.modules.volumes.logic().CloneVolume(volume, "MaskedImage")
+      slicer.util.updateVolumeFromArray(maskedVolumeNode, maskedVoxels)
+
+    # Subtraction from original volume
+    
+    # `a` and `b` are numpy arrays,
+    # they can be combined using any numpy array operations
+    # to produce the result array `c`
+    defaced = voxels - maskedVoxels
+    if debug:
+      defacedNode = slicer.modules.volumes.logic().CloneVolume(volume, "Defaced")
+      slicer.util.updateVolumeFromArray(defacedNode, defaced)
+
+    # Threshold
+    defaced[ defaced < 0 ] = 0
+    defacedThreshNode = slicer.modules.volumes.logic().CloneVolume(volume, "DefacedThresh")
+    slicer.util.updateVolumeFromArray(defacedThreshNode, defaced)
+    defacedImgPath = str(img_path).replace(".nii.gz", "_defaced.nii.gz")
+    slicer.util.saveNode(defacedThreshNode, str(defacedImgPath))
+
+    # Render
+    if debug:
+      mgr = slicer.app.layoutManager()
+      if mgr is not None:
+        mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
+
+      print("Showing volume rendering of node " + defacedThreshNode.GetName())
+      volRenLogic = slicer.modules.volumerendering.logic()
+      displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(defacedThreshNode)
+      displayNode.SetAutoScalarRange(True)
+      displayNode.SetFollowVolumeDisplayNode(True)
+      
+      displayNode.SetVisibility(True)
+
+      #Set background to black (required for transparent background)
+      view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+      view.mrmlViewNode().SetBackgroundColor(1,1,1)
+      view.mrmlViewNode().SetBackgroundColor2(1,1,1)
+      view.resetFocalPoint()
+      view.mrmlViewNode().SetAxisLabelsVisible(False)
+      view.mrmlViewNode().SetBoxVisible(False)
+      view.forceRender()
+      numberOfScreenshots = 6
+      axisIndex = [0, 2, 4, 1, 3, 5]  # order of views in the gallery image
+      cap = ScreenCapture.ScreenCaptureLogic()
+      for screenshotIndex in range(numberOfScreenshots):
+          view.rotateToViewAxis(axisIndex[screenshotIndex])
+          slicer.util.forceRenderAllViews()
+          outputFilename = str(img_path).replace(".nii.gz", "_def_screenshot_" + str(screenshotIndex) + ".png")
+          cap.captureImageFromView(view, outputFilename)
+      
+      # # Capture RGBA image
+      # renderWindow = view.renderWindow()
+      # renderWindow.SetAlphaBitPlanes(1)
+      # wti = vtk.vtkWindowToImageFilter()
+      # wti.SetInputBufferTypeToRGBA()
+      # wti.SetInput(renderWindow)
+      # writer = vtk.vtkPNGWriter()
+      # writer.SetFileName(str(img_path).replace(".nii.gz", "_def_screenshot.png"))
+      # writer.SetInputConnection(wti.GetOutputPort())
+      # writer.Write()
+
+      # for i in range(6):
+      #   view.yaw()
+      # wti = vtk.vtkWindowToImageFilter()
+      # wti.SetInputBufferTypeToRGBA()
+      # wti.SetInput(renderWindow)
+      # writer = vtk.vtkPNGWriter()
+      # writer.SetFileName(str(img_path).replace(".nii.gz", "_def_screenshot_1.png"))
+      # writer.SetInputConnection(wti.GetOutputPort())
+      # writer.Write()
+
+    # Do cleanup
+    slicer.mrmlScene.RemoveNode(volume)
+    slicer.mrmlScene.RemoveNode(segmentation)
+
+    if debug:
+      slicer.mrmlScene.RemoveNode(closedDilatedSlicerImage)
+      slicer.mrmlScene.RemoveNode(maskedVolumeNode)
+      slicer.mrmlScene.RemoveNode(defacedNode)
+      slicer.mrmlScene.RemoveNode(defacedThreshNode)
+
+      
+    return True
+
     
   def process(self, input_image_list, output_dir, out_format, deface_method, progressbar=None, progressmsg=None):
     """
@@ -669,6 +817,9 @@ class SlicerBatchAnonymizeTest(ScriptedLoadableModuleTest):
 
     # Test algorithm with non-inverted threshold
     logic.process(None, None, None, None, None)
+    print("Running defacing")
+    did_good = logic.runDefacing("/Users/hinashah/Downloads/MG_test_scan.nii.gz", "/Users/hinashah/Downloads/MG_test_scan_SegOut")
+    self.assertTrue(did_good)
 
     self.delayDisplay('Test passed')
  
