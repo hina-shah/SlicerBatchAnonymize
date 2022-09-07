@@ -14,6 +14,7 @@ from pathlib import Path
 import csv
 import uuid
 import ScreenCapture
+import timeit
 #
 # SlicerBatchAnonymize
 #
@@ -523,37 +524,37 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     slicer.util.saveNode(defacedThreshNode, str(defacedImgPath))
 
     # Render
-    if debug:
-      mgr = slicer.app.layoutManager()
-      if mgr is not None:
-        mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
+    
+    mgr = slicer.app.layoutManager()
+    if mgr is not None:
+      mgr.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
 
-      print("Showing volume rendering of node " + defacedThreshNode.GetName())
-      volRenLogic = slicer.modules.volumerendering.logic()
-      displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(defacedThreshNode)
-      displayNode.SetAutoScalarRange(True)
-      displayNode.SetFollowVolumeDisplayNode(True)
-      
-      displayNode.SetVisibility(True)
+    print("Showing volume rendering of node " + defacedThreshNode.GetName())
+    volRenLogic = slicer.modules.volumerendering.logic()
+    displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(defacedThreshNode)
+    displayNode.SetAutoScalarRange(True)
+    displayNode.SetFollowVolumeDisplayNode(True)
+    
+    displayNode.SetVisibility(True)
 
-      #Set background to black (required for transparent background)
-      view = slicer.app.layoutManager().threeDWidget(0).threeDView()
-      view.mrmlViewNode().SetBackgroundColor(1,1,1)
-      view.mrmlViewNode().SetBackgroundColor2(1,1,1)
-      view.resetFocalPoint()
-      view.mrmlViewNode().SetAxisLabelsVisible(False)
-      view.mrmlViewNode().SetBoxVisible(False)
-      view.forceRender()
-      numberOfScreenshots = 4
-      #axisIndex = [0, 2, 4, 1, 3, 5]  # order of views in the gallery image
-      axisIndex = [3, 0, 1, 4]
-      cap = ScreenCapture.ScreenCaptureLogic()
-      for screenshotIndex in range(numberOfScreenshots):
-          view.rotateToViewAxis(axisIndex[screenshotIndex])
-          slicer.util.forceRenderAllViews()
-          outputFilename = str(img_path).replace(".nii.gz", "_def_screenshot_" + str(screenshotIndex) + ".png")
-          cap.captureImageFromView(view, outputFilename)
-      
+    #Set background to black (required for transparent background)
+    view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+    view.mrmlViewNode().SetBackgroundColor(1,1,1)
+    view.mrmlViewNode().SetBackgroundColor2(1,1,1)
+    view.resetFocalPoint()
+    view.mrmlViewNode().SetAxisLabelsVisible(False)
+    view.mrmlViewNode().SetBoxVisible(False)
+    view.forceRender()
+    numberOfScreenshots = 4
+    #axisIndex = [0, 2, 4, 1, 3, 5]  # order of views in the gallery image
+    axisIndex = [3, 0, 1, 4]
+    cap = ScreenCapture.ScreenCaptureLogic()
+    for screenshotIndex in range(numberOfScreenshots):
+        view.rotateToViewAxis(axisIndex[screenshotIndex])
+        slicer.util.forceRenderAllViews()
+        outputFilename = str(img_path).replace(".nii.gz", "_def_screenshot_" + str(screenshotIndex) + ".png")
+        cap.captureImageFromView(view, outputFilename)
+    
       # # Capture RGBA image
       # renderWindow = view.renderWindow()
       # renderWindow.SetAlphaBitPlanes(1)
@@ -578,12 +579,12 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     # Do cleanup
     slicer.mrmlScene.RemoveNode(volume)
     slicer.mrmlScene.RemoveNode(segmentation)
+    slicer.mrmlScene.RemoveNode(defacedThreshNode)
 
     if debug:
       slicer.mrmlScene.RemoveNode(closedDilatedSlicerImage)
       slicer.mrmlScene.RemoveNode(maskedVolumeNode)
       slicer.mrmlScene.RemoveNode(defacedNode)
-      slicer.mrmlScene.RemoveNode(defacedThreshNode)
 
       
     return True
@@ -665,16 +666,23 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     slicer.app.processEvents()
     #slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting')
     idx = 0
+    time_keys = ["file_output", "anon_time"]
+    if deface_method is not None:
+      time_keys.extend(['seg_time', 'deface_time', 'deface_method'])
+    time_rows = []
     try:
       for patient in slicerdb.patients():
         for study in slicerdb.studiesForPatient(patient):
           for series in slicerdb.seriesForStudy(study):
+            time_row = {}
             if self.process_cont == False:
               raise Exception("User stopped processing")            
             files = slicerdb.filesForSeries(series)
             imgpath =  Path(files[0]).parent
             if imgpath in input_image_list:
               print("Will export this: " + str(imgpath))
+              time_row['file_output'] = input_image_list[imgpath][1]
+              anon_time_start = timeit.default_timer()
               self.reportProgress(stage + " : " + str(imgpath), (idx+1)*100.0/len(input_image_list), progressbar, progressmsg)
               slicer.app.processEvents()
               try:
@@ -701,7 +709,15 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                     print(str(output_dir/"Defacing"))
                     parameters = {'inputVolume': str(out_path), 'modelDirectory': modelsPath, 'highDefinition': False, 'skullStructure': "SKIN", 'merge': ['MERGE'], 'genVtk': True, 'save_in_folder': True, 'output_folder': str(output_dir/"Defacing"), 'precision': 50, 'vtk_smooth': 5, 'prediction_ID': 'Pred', 'gpu_usage': 1, 'cpu_usage': 1, 'temp_fold': tempLoc}
                     print(parameters)
+                    seg_time_start = timeit.default_timer()
                     slicer.cli.run(slicer.modules.amasss_cli, None, parameters, wait_for_completion=True, update_display=False)
+                    seg_time_end = timeit.default_timer()
+                    time_row['seg_time'] = seg_time_end - seg_time_start
+                    time_row['deface_method'] = deface_method
+                    deface_time_start = timeit.default_timer()
+                    self.runDefacing(str(out_path), str(out_path).replace(".nii.gz", "_SegOut"), debug=False)
+                    deface_time_end = timeit.default_timer()
+                    time_row['deface_time'] = deface_time_end - deface_time_start
                 if out_format == ".dcm":
                   output_folder = output_dir / input_image_list[imgpath][1]
                   output_folder.mkdir(parents=True, exist_ok=True)
@@ -726,6 +742,9 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                   filename = input_image_list[imgpath][1] + out_format
                   out_path = output_dir / filename
                   slicer.util.saveNode(image_node, str(out_path))
+                anon_time_end = timeit.default_timer()
+                time_row['anon_time'] = anon_time_end - anon_time_start
+                time_rows.append(time_row)
               except Exception as e:
                 logging.error("Error reading/writing file: {} \n {}".format(imgpath, e))
                 if image_node is not None:
@@ -750,6 +769,16 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
         logging.error("Failed to write the crosswalk file")
         logging.error(e)
         slicer.util.errorDisplay("Failed to write the crosswalk file")
+    if len(time_rows) > 0:
+      try:
+        with open(output_dir/"timings.csv", "w", encoding="utf-8") as f:
+          w = csv.DictWriter(f, time_rows[0].keys())
+          w.writeheader()
+          w.writerows(time_rows)
+      except Exception as e:
+        logging.error("Failed to write the Timing file")
+        logging.error(e)
+        slicer.util.errorDisplay("Failed to write the Timing file")
     if len(error_files) > 0:
       try:
         with open(output_dir / "files_not_converted.txt", "w") as f:
