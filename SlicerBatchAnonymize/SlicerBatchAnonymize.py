@@ -445,7 +445,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       progressmsg.text = msg
       progressmsg.update()
   
-  def runDefacing(self, img_path, seg_path, debug = True):
+  def runAMASSDefacing(self, img_path, seg_path, debug = True):
     """
     :param img_path :  original input image
     :param seg_path : path where skin segmentation lives
@@ -456,7 +456,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       volume = slicer.util.loadVolume(img_path)
     except Exception as e:
       logging.error(f"Error reading the input volume {img_path}, \n {e}")
-      return False
+      return False, None
     # Read the segmentation in as a labelmap
 
     try:
@@ -464,7 +464,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       segmentation = slicer.util.loadVolume(str(segmentation_path))
     except Exception as e:
       logging.error(f"Error reading the SKIN Segmentation from directory {seg_path}, \n {e}")
-      return False
+      return False, None
 
     # Run closing on labelmap using original pixel spacing
     ### Get pixel spacing from the oriignal volume:
@@ -587,7 +587,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       slicer.mrmlScene.RemoveNode(defacedNode)
 
       
-    return True
+    return True, defacedThreshNode
 
     
   def process(self, input_image_list, output_dir, out_format, deface_method, progressbar=None, progressmsg=None):
@@ -707,6 +707,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                     tempLoc = qt.QStandardPaths.writableLocation(tempPath)
                     print(str(out_path))
                     print(str(output_dir/"Defacing"))
+                    # First run AMASS Segmentation inference to get the Skin labels
                     parameters = {'inputVolume': str(out_path), 'modelDirectory': modelsPath, 'highDefinition': False, 'skullStructure': "SKIN", 'merge': ['MERGE'], 'genVtk': True, 'save_in_folder': True, 'output_folder': str(output_dir/"Defacing"), 'precision': 50, 'vtk_smooth': 5, 'prediction_ID': 'Pred', 'gpu_usage': 1, 'cpu_usage': 1, 'temp_fold': tempLoc}
                     print(parameters)
                     seg_time_start = timeit.default_timer()
@@ -715,9 +716,13 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                     time_row['seg_time'] = seg_time_end - seg_time_start
                     time_row['deface_method'] = deface_method
                     deface_time_start = timeit.default_timer()
-                    self.runDefacing(str(out_path), str(out_path).replace(".nii.gz", "_SegOut"), debug=False)
+                    # Postprocess the original image using the skin label.
+                    success, ret_node = self.runAMASSDefacing(str(out_path), str(out_path).replace(".nii.gz", "_SegOut"), debug=False)
                     deface_time_end = timeit.default_timer()
                     time_row['deface_time'] = deface_time_end - deface_time_start
+                    if success:
+                      print("Successful Defacing!")
+                      image_node = ret_node
                 if out_format == ".dcm":
                   output_folder = output_dir / input_image_list[imgpath][1]
                   output_folder.mkdir(parents=True, exist_ok=True)
