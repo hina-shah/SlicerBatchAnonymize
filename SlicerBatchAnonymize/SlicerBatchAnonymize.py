@@ -1,5 +1,5 @@
 import os
-from typing_extensions import assert_type
+#from typing_extensions import assert_type
 import unittest
 import logging
 import vtk, qt, ctk, slicer
@@ -579,7 +579,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     # Do cleanup
     slicer.mrmlScene.RemoveNode(volume)
     slicer.mrmlScene.RemoveNode(segmentation)
-    slicer.mrmlScene.RemoveNode(defacedThreshNode)
+    #slicer.mrmlScene.RemoveNode(defacedThreshNode)
 
     if debug:
       slicer.mrmlScene.RemoveNode(closedDilatedSlicerImage)
