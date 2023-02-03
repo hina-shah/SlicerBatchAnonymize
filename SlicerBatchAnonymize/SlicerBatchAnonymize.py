@@ -539,6 +539,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
               if agestr == '' and dob!= "" and studydate !="":
                   study_dt = datetime.strptime(studydate, '%Y%m%d')
                   age = int((study_dt - dob_dt).days/365)
+                  age = age if age < 90 else 90 ## ANYBODY ABOVE 90 years of age will remain 90.
                   agestr =  str(age).zfill(3)+'Y'
               self.reportProgress(stage + " : " + str(imgpath), (idx+1)*100.0/len(input_image_list), progressbar, progressmsg)
               slicer.app.processEvents()
