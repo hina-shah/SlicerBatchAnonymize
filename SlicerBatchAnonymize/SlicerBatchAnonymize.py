@@ -9,6 +9,7 @@ import DICOMScalarVolumePlugin
 from pathlib import Path
 import csv
 import uuid
+from datetime import datetime, timedelta
 
 #
 # SlicerBatchAnonymize
@@ -372,7 +373,7 @@ class SlicerBatchAnonymizeWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     """
     try:
       # Compute output
-      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText, self.ui.progressBar, self.ui.progressLabel)
+      self.logic.process(self.input_image_list, self.output_dir, self.ui.outputFormatComboBox.currentText, self.ui.keepGenderCheckBox.checked,  self.ui.keepAgeCheckBox.checked, self.ui.progressBar, self.ui.progressLabel)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -433,7 +434,7 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
       progressmsg.text = msg
       progressmsg.update()
     
-  def process(self, input_image_list, output_dir, out_format, progressbar=None, progressmsg=None):
+  def process(self, input_image_list, output_dir, out_format, keep_gender=False, keep_age=False, progressbar=None, progressmsg=None):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -510,15 +511,35 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
     #slicer.progressWindow = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(),windowTitle='Anonymizing and exporting')
     idx = 0
     try:
+      patient_db = []
+      import pydicom
+      import random
       for patient in slicerdb.patients():
+        patientid_ded = pydicom.uid.generate_uid(None)
+        #create an offset in days (3-6) months to add to birth date when age is requested to be kept in tact.
+        random_offset = random.choice([-5, -4, -3, 3, 4, 5])*30
         for study in slicerdb.studiesForPatient(patient):
+          studyid_ded = pydicom.uid.generate_uid(None)
           for series in slicerdb.seriesForStudy(study):
+            series_ded = pydicom.uid.generate_uid(None)
             if self.process_cont == False:
               raise Exception("User stopped processing")            
             files = slicerdb.filesForSeries(series)
             imgpath =  Path(files[0]).parent
+            
             if imgpath in input_image_list:
               print("Will export this: " + str(imgpath))
+              gender = slicerdb.fileValue(files[0], "0010,0040")
+              agestr = slicerdb.fileValue(files[0], "0010, 1010")
+              dob = slicerdb.fileValue(files[0], "0010,0030")
+              if dob!="":
+                dob_dt = datetime.strptime(dob, '%Y%m%d')
+                dob_dt = dob_dt + timedelta(days=random_offset)
+              studydate = slicerdb.fileValue(files[0], "0008,0020")
+              if agestr == '' and dob!= "" and studydate !="":
+                  study_dt = datetime.strptime(studydate, '%Y%m%d')
+                  age = int((study_dt - dob_dt).days/365)
+                  agestr =  str(age).zfill(3)+'Y'
               self.reportProgress(stage + " : " + str(imgpath), (idx+1)*100.0/len(input_image_list), progressbar, progressmsg)
               slicer.app.processEvents()
               try:
@@ -529,6 +550,12 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                   slicer.mrmlScene.RemoveNode(image_node)
                   continue
                 if out_format == ".dcm":
+                  sdict = {}
+                  sdict['PatientID'] = patientid_ded
+                  sdict['StudyID'] = studyid_ded
+                  sdict['SeriesID'] = series_ded
+                  #filename = input_image_list[imgpath][1] + out_format
+                  #out_path = output_dir / filename
                   output_folder = output_dir / input_image_list[imgpath][1]
                   output_folder.mkdir(parents=True, exist_ok=True)
                   # Create patient and study and put the volume under the study
@@ -545,15 +572,33 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
                     continue
                   for exp in exportables:
                     exp.directory = output_folder
+                    exp.setTag("PatientID", patientid_ded)
+                    exp.setTag("StudyInstanceUID", studyid_ded)
+                    exp.setTag("SeriesInstanceUID", series_ded)
+                    exp.setTag("StudyTime", "")
+                    exp.setTag("ContentDate", "")
+                    exp.setTag("ContentTime", "")
+                    exp.setTag("StudyDate", "")
+                    if keep_age:
+                      exp.setTag("PatientAge", agestr)
+                      exp.setTag("StudyDate", studydate)
+                      exp.setTag("PatientBirthDate", dob_dt.strftime("%Y%m%d"))
+                      sdict['StudyDate'] = studydate
+                      sdict['PatientAge'] = agestr
+                      sdict["PatientBirthDate"] = dob_dt.strftime("%Y%m%d")
+                    if keep_gender:
+                      exp.setTag("PatientSex", gender)
+                      sdict['Gender'] = gender
                   exporter.export(exportables)
                   slicer.mrmlScene.RemoveNode(shNode)
                   out_path = output_folder / ('ScalarVolume_' + str(exportables[0].subjectHierarchyItemID))
+                  patient_db.append(sdict)
                 else:
                   filename = input_image_list[imgpath][1] + out_format
                   out_path = output_dir / filename
                   slicer.util.saveNode(image_node, str(out_path))
               except Exception as e:
-                logging.error("Error reading/writing file: {}".format(imgpath))
+                logging.error("Error reading/writing file: {}\n{}".format(imgpath,e))
                 if image_node is not None:
                   slicer.mrmlScene.RemoveNode(image_node)
                 error_files.append(imgpath)
@@ -576,11 +621,23 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
         logging.error("Failed to write the crosswalk file")
         logging.error(e)
         slicer.util.errorDisplay("Failed to write the crosswalk file")
+
+    if len(patient_db) > 0: 
+      try:
+        with open(output_dir/"details.csv", "w", encoding="utf-8") as f:
+          w = csv.DictWriter(f, patient_db[0].keys())
+          w.writeheader()
+          w.writerows(patient_db)
+      except Exception as e:
+        logging.error("Failed to write the patientdb file")
+        logging.error(e)
+        slicer.util.errorDisplay("Failed to write the patient db file")
+
     if len(error_files) > 0:
       try:
         with open(output_dir / "files_not_converted.txt", "w") as f:
           for e in error_files:
-            f.write(e+"\n")
+            f.write(str(e)+"\n")
       except IOError:
         logging.error("Failed to write the list of failed files")
         slicer.util.errorDisplay("Failed to write the list of failed files")
@@ -612,7 +669,6 @@ class SlicerBatchAnonymizeLogic(ScriptedLoadableModuleLogic):
 #
 # SlicerBatchAnonymizeTest
 #
-
 class SlicerBatchAnonymizeTest(ScriptedLoadableModuleTest):
   """
   This is the test case for your scripted module.
