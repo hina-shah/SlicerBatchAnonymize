@@ -12,8 +12,8 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
+     <property name="text">
       <string>Inputs</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
@@ -25,7 +25,7 @@
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="ctkDirectoryButton" name="inDirButton" native="true">
+       <widget class="ctkDirectoryButton" name="inDirButton">
         <property name="toolTip">
          <string>Select directory with DICOMs</string>
         </property>
@@ -62,8 +62,8 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="outputsCollapsibleButton" native="true">
-     <property name="text" stdset="0">
+    <widget class="ctkCollapsibleButton" name="outputsCollapsibleButton">
+     <property name="text">
       <string>Outputs</string>
      </property>
      <layout class="QFormLayout" name="formLayout_4">
@@ -75,7 +75,7 @@
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="ctkDirectoryButton" name="outDirButton" native="true">
+       <widget class="ctkDirectoryButton" name="outDirButton">
         <property name="toolTip">
          <string>Select a directory to copy the anonymized files to.</string>
         </property>
@@ -151,18 +151,35 @@
         </property>
        </widget>
       </item>
+      <item row="3" column="0">
+       <layout class="QHBoxLayout" name="horizontalLayout_2"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QCheckBox" name="keepAgeCheckBox">
+        <property name="text">
+         <string>Keep ages</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QCheckBox" name="keepGenderCheckBox">
+        <property name="text">
+         <string>Keep gender</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="crosswalkCollapsibleButton" native="true">
+    <widget class="ctkCollapsibleButton" name="crosswalkCollapsibleButton">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-     <property name="text" stdset="0">
+     <property name="text">
       <string>Preview Crosswalk</string>
      </property>
      <layout class="QFormLayout" name="formLayout">
